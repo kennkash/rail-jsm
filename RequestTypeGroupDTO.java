@@ -3,9 +3,6 @@ package com.samsungbuilder.jsm.dto;
 
 import org.codehaus.jackson.annotate.JsonProperty;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Data Transfer Object for Request Type Groups
  * Represents a grouping/category of request types in Jira Service Management
@@ -29,10 +26,6 @@ public class RequestTypeGroupDTO {
 
     @JsonProperty("requestTypeCount")
     private Integer requestTypeCount;
-
-    // ✅ NEW: ordered request types for THIS group
-    @JsonProperty("requestTypes")
-    private List<RequestTypeDTO> requestTypes = new ArrayList<>();
 
     public RequestTypeGroupDTO() {
     }
@@ -96,21 +89,6 @@ public class RequestTypeGroupDTO {
 
     public void setRequestTypeCount(Integer requestTypeCount) {
         this.requestTypeCount = requestTypeCount;
-    }
-
-    public List<RequestTypeDTO> getRequestTypes() {
-        return requestTypes;
-    }
-
-    public void setRequestTypes(List<RequestTypeDTO> requestTypes) {
-        this.requestTypes = requestTypes != null ? requestTypes : new ArrayList<>();
-        this.requestTypeCount = this.requestTypes.size();
-    }
-
-    public void addRequestType(RequestTypeDTO dto) {
-        if (dto == null) return;
-        this.requestTypes.add(dto);
-        this.requestTypeCount = this.requestTypes.size();
     }
 
     @Override
