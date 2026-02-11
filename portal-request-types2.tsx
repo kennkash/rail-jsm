@@ -4,20 +4,31 @@
 import { FormComponentModel } from "@/models/FormComponent";
 import { UseFormReturn, ControllerRenderProps, FieldValues } from "react-hook-form";
 import { ReactCode, Viewports } from "@/types/portal-builder.types";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { usePortalBuilderStore } from "@/stores/portal-builder-store";
+import { useShallow } from "zustand/react/shallow";
 import { useRequestTypes } from "@/hooks/use-request-types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
+import { CloudGPTIcon } from "@/components/ui/cloudgpt-icon";
+import { GradientText } from "@/components/ui/gradient-text";
+import { generateRequestTypesSubtitle } from "@/lib/cloudgpt-api";
+import { Textarea } from "@/components/ui/textarea";
+import { ROUTE_PATHS, buildRoutePath, buildRequestTypeUrl } from "@/types/router";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { buildRequestTypeUrl } from "@/types/router";
 
 type BootstrapWindow = typeof window & {
   RAIL_PORTAL_BOOTSTRAP?: {
@@ -64,12 +75,108 @@ type RequestTypeRoutingOptions = {
 
 const REQUEST_DIALOG_IFRAME_STYLE_ID = "rail-request-dialog-iframe-style";
 const REQUEST_DIALOG_IFRAME_STYLES = `
-  header#header { display: none !important; }
-  .cv-bg-image { display: none !important; }
-  #content-wrapper { margin: 0px !important; width: 100% !important; padding: 20px 75px 0px !important; }
-  #footer { display: none !important; }
+  header#header {
+    display: none !important;
+  }
+
+  .cv-bg-image {
+    display: none !important;
+  }
+
+  #content-wrapper {
+    margin: 0px !important;
+    width: 100% !important;
+    padding: 20px 75px 0px !important;
+  }
+
+  #footer {
+    display: none !important;
+  }
 `;
 
+/**
+ * Default sample request types with grouping
+ * Groups help organize request types into logical categories
+ */
+const defaultRequestTypes: RequestTypeOption[] = [
+  // Support Group
+  {
+    id: "help",
+    name: "Get Help",
+    description: "Ask a question or get support",
+    group: "Support",
+    groups: ["Support"],
+  },
+  {
+    id: "incident",
+    name: "Report an Incident",
+    description: "Report a problem or issue",
+    group: "Support",
+    groups: ["Support"],
+  },
+  {
+    id: "question",
+    name: "Ask a Question",
+    description: "General questions and inquiries",
+    group: "Support",
+    groups: ["Support"],
+  },
+
+  // Service Requests Group
+  {
+    id: "service-request",
+    name: "Service Request",
+    description: "Request a service or item",
+    group: "Services",
+    groups: ["Services"],
+  },
+  {
+    id: "access-request",
+    name: "Access Request",
+    description: "Request access to systems or resources",
+    group: "Services",
+    groups: ["Services"],
+  },
+  {
+    id: "equipment",
+    name: "Equipment Request",
+    description: "Request equipment or supplies",
+    group: "Services",
+    groups: ["Services"],
+  },
+
+  // Change & Improvement Group
+  {
+    id: "change",
+    name: "Request a Change",
+    description: "Propose a change or improvement",
+    group: "Changes",
+    groups: ["Changes"],
+  },
+  {
+    id: "feature",
+    name: "Feature Request",
+    description: "Suggest a new feature",
+    group: "Changes",
+    groups: ["Changes"],
+  },
+];
+
+/**
+ * PortalRequestTypes Widget
+ * Displays Jira Service Management request types in a grid or list layout
+ *
+ * Features:
+ * - Grid/List layout toggle
+ * - Grouping by category
+ * - 1-4 column grid support
+ * - Sample data (ready for JSM integration)
+ *
+ * Widget Rules:
+ * - Reusable (can have multiple on a portal)
+ * - Full-width widget
+ * - Uses sample data until JSM endpoint connected
+ */
 export function PortalRequestTypes(
   component: FormComponentModel,
   form: UseFormReturn<FieldValues, undefined>,
@@ -79,77 +186,288 @@ export function PortalRequestTypes(
 ) {
   const title = component.getField("content", viewport) || "How can we help you?";
   const subtitle = component.getField("description", viewport) || "";
-  const variant = (component.getField("properties.variant", viewport) as string | undefined) || "cards";
+  const variant =
+    (component.getField("properties.variant", viewport) as string | undefined) || "cards";
   const layout = component.getField("properties.layout", viewport) || "grid";
   const columns = component.getField("properties.columns", viewport) || "2";
-  const showGroups = (component.getField("properties.showGroups", viewport) ?? "yes") !== "no";
-  const groupLayout = (component.getField("properties.groupLayout", viewport) as string | undefined) || "top-tabs";
-  
+  const showGroups =
+    (component.getField("properties.showGroups", viewport) ?? "yes") !== "no";
+  const groupLayout =
+    (component.getField("properties.groupLayout", viewport) as string | undefined) ||
+    "top-tabs";
+  const configuredRequestTypes =
+    (component.getField("properties.requestTypes", viewport) as
+      | RequestTypeOption[]
+      | null
+      | undefined) || defaultRequestTypes;
   const portalProjectKey = usePortalBuilderStore((state) => state.projectKey);
   const portalIdFromStore = usePortalBuilderStore((state) => state.portalId);
   const serviceDeskIdFromStore = usePortalBuilderStore((state) => state.serviceDeskId);
   const isLiveFromStore = usePortalBuilderStore((state) => state.isLive);
   const mode = usePortalBuilderStore((state) => state.mode);
   const isCustomerPortal = mode === "preview";
-  
   const configuredProjectKey = component.getField("properties.projectKey", viewport) as string | undefined;
   const resolvedApiProjectKey = portalProjectKey || configuredProjectKey || null;
+  const effectiveProjectKey = (resolvedApiProjectKey || "PROJECT").toUpperCase();
+  const fallbackPortalId = resolvedApiProjectKey ? `${resolvedApiProjectKey.toLowerCase()}-portal` : "default";
+  const resolvedPortalId = portalIdFromStore || fallbackPortalId;
   const resolvedServiceDeskId = serviceDeskIdFromStore || null;
-  
   const { data, isLoading } = useRequestTypes(resolvedApiProjectKey) as {
     data?: RequestTypesApiResponse;
     isLoading: boolean;
   };
-  
   const [jsmIconUrls, setJsmIconUrls] = useState<Record<string, string> | null>(null);
 
-  // Icon fetching logic
   useEffect(() => {
-    if (!resolvedServiceDeskId) { setJsmIconUrls(null); return; }
+    if (!resolvedServiceDeskId) {
+      setJsmIconUrls(null);
+      return;
+    }
+
     let cancelled = false;
+
     const fetchIcons = async () => {
       try {
         const base = getBootstrapBaseUrl();
-        if (!base) return;
+        if (!base) {
+          return;
+        }
+
         const response = await fetch(
           `${base}/rest/servicedeskapi/servicedesk/${resolvedServiceDeskId}/requesttype?limit=100`,
-          { credentials: 'same-origin' }
+          { credentials: 'same-origin' },
         );
-        if (!response.ok) return;
+
+        if (!response.ok) {
+          return;
+        }
+
         const payload = await response.json();
+        const values = Array.isArray(payload?.values) ? payload.values : [];
+
         const mapping: Record<string, string> = {};
-        (payload?.values || []).forEach((v: any) => {
-          if (!v || !v.id) return;
-          const url = v.icon?._links?.iconUrls?.["32x32"] || v.icon?._links?.iconUrls?.["24x24"];
-          if (url) mapping[v.id] = url;
-        });
-        if (!cancelled) setJsmIconUrls(mapping);
-      } catch (e) {}
+
+        for (const value of values) {
+          if (!value || !value.id) continue;
+          const iconUrls = value.icon?._links?.iconUrls as Record<string, string> | undefined;
+          if (!iconUrls) continue;
+
+          const url =
+            iconUrls["32x32"] ||
+            iconUrls["24x24"] ||
+            iconUrls["16x16"] ||
+            iconUrls["48x48"];
+
+          if (typeof url === "string" && url.length > 0) {
+            mapping[value.id] = url;
+          }
+        }
+
+        if (!cancelled) {
+          setJsmIconUrls(mapping);
+        }
+      } catch (error) {
+        // Silently fail - icons are optional
+      }
     };
+
     fetchIcons();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [resolvedServiceDeskId]);
 
+  const [selectedRequestType, setSelectedRequestType] = useState<RequestTypeOption | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [iframeStatus, setIframeStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [lastKnownHref, setLastKnownHref] = useState<string | null>(null);
+  const [createdIssueKey, setCreatedIssueKey] = useState<string | null>(null);
+  const [postSubmitUrl, setPostSubmitUrl] = useState<string | null>(null);
+  const [lastSubmittedRequest, setLastSubmittedRequest] = useState<{ name: string; description?: string | null } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const routeProjectKey = routingOptions?.routeProjectKey || resolvedApiProjectKey || portalProjectKey || undefined;
+  const routeRequestTypeId = routingOptions?.routeRequestTypeId;
   const onRouteChange = routingOptions?.onRouteChange;
-
-  // Process and sort request types
+  
   const apiRequestTypes = useMemo<RequestTypeOption[] | null>(() => {
-    if (!data?.requestTypes?.length) return null;
-    return data.requestTypes.map((type) => ({
-      ...type,
-      iconUrl: jsmIconUrls?.[type.id] || type.iconUrl,
-      displayOrder: type.displayOrder ?? 999,
-      groupOrderMap: type.groupOrderMap || {},
-    }));
+    if (!data?.requestTypes?.length) {
+      return null;
+    }
+
+    return data.requestTypes.map((type) => {
+      const iconUrlFromJsm = jsmIconUrls?.[type.id];
+
+      return {
+        id: type.id,
+        name: type.name,
+        description: type.description,
+        iconUrl: iconUrlFromJsm || type.iconUrl,
+        group: type.group || "Other",
+        groups: type.groups && type.groups.length > 0 ? type.groups : undefined,
+        groupIds: type.groupIds,
+        displayOrder: type.displayOrder ?? 999,
+        groupOrderMap: type.groupOrderMap || {},
+      };
+    });
   }, [data, jsmIconUrls]);
+  
+  const requestTypes = apiRequestTypes ?? configuredRequestTypes;
+  const apiGroupNames = data?.groups?.map((group) => group.name) ?? [];
+  const enableInteractivePreview = mode === "editor-preview" || mode === "preview";
+  const injectIframeBrandingStyles = useCallback(() => {
+    const frame = iframeRef.current;
+    if (!frame) {
+      return;
+    }
+    try {
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      if (!doc) {
+        return;
+      }
+      const targetRoot = doc.head || doc.body;
+      if (!targetRoot) {
+        return;
+      }
+      let styleEl = doc.getElementById(REQUEST_DIALOG_IFRAME_STYLE_ID) as HTMLStyleElement | null;
+      if (!styleEl || styleEl.tagName !== "STYLE") {
+        if (styleEl) {
+          styleEl.remove();
+        }
+        styleEl = doc.createElement("style");
+        styleEl.id = REQUEST_DIALOG_IFRAME_STYLE_ID;
+        styleEl.type = "text/css";
+        targetRoot.appendChild(styleEl);
+      }
+      styleEl.textContent = REQUEST_DIALOG_IFRAME_STYLES;
+    } catch (error) {
+      // Silently fail - style injection is best-effort
+    }
+  }, []);
 
-  const requestTypes = apiRequestTypes || [];
+  const handleSubmissionSuccess = useCallback(
+    (
+      href: string | null,
+      issueKey: string | null,
+      requestDetails?: { name: string; description?: string | null },
+    ) => {
+      setCreatedIssueKey(issueKey);
+      setPostSubmitUrl(href ?? null);
+      setIframeUrl(null);
+      setIframeStatus("ready");
+      setLastSubmittedRequest(requestDetails ?? null);
+    },
+    [],
+  );
 
+  const buildRequestUrl = useCallback((requestTypeId: string) => {
+    if (!enableInteractivePreview) {
+      return null;
+    }
+    const base = getBootstrapBaseUrl();
+    if (!base) {
+      return null;
+    }
+    const portalIdentifier = resolvedServiceDeskId || resolvedPortalId;
+    return `${base}/servicedesk/customer/portal/${portalIdentifier}/create/${requestTypeId}`;
+  }, [enableInteractivePreview, resolvedPortalId]);
+
+  const handleRequestTypeClick = useCallback((requestType: RequestTypeOption) => {
+    if (!enableInteractivePreview) {
+      return;
+    }
+    setIframeStatus("loading");
+    setCreatedIssueKey(null);
+    setPostSubmitUrl(null);
+    if (onRouteChange && routeProjectKey) {
+      // When on customer portal (preview mode), always use RAIL URL since customer-rail is a Live portal
+      // When in editor-preview mode, use the store's isLive status
+      const effectiveIsLive = isCustomerPortal || isLiveFromStore;
+      const targetPath = buildRequestTypeUrl(
+        effectiveIsLive,
+        routeProjectKey,
+        requestType.id,
+        resolvedServiceDeskId ?? undefined
+      );
+      onRouteChange(targetPath, false);
+    }
+    const requestUrl = buildRequestUrl(requestType.id);
+    setSelectedRequestType(requestType);
+    setIframeUrl(requestUrl);
+    setIsDialogOpen(Boolean(requestUrl));
+  }, [buildRequestUrl, enableInteractivePreview, isCustomerPortal, isLiveFromStore, onRouteChange, resolvedServiceDeskId, routeProjectKey]);
+
+  // Auto-open dialog when deep-linked via requesttype route
+  useEffect(() => {
+    if (!enableInteractivePreview || !routeRequestTypeId || !requestTypes?.length) {
+      return;
+    }
+    const match = requestTypes.find((rt) => rt.id === routeRequestTypeId);
+    if (!match) {
+      return;
+    }
+    const url = buildRequestUrl(match.id);
+    setSelectedRequestType(match);
+    setIframeUrl(url);
+    setIsDialogOpen(Boolean(url));
+    setIframeStatus(url ? "loading" : "idle");
+    setCreatedIssueKey(null);
+    setPostSubmitUrl(null);
+  }, [enableInteractivePreview, routeRequestTypeId, requestTypes, buildRequestUrl]);
+
+  const parseSuccessFromHref = (href: string | null) => {
+    if (!href) return { issueKey: null, success: false };
+    try {
+      const url = new URL(href, window.location.origin);
+      // Success URLs typically look like /servicedesk/customer/portal/{portalId}/{ISSUEKEY}
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      const issueKeyCandidate = pathParts[pathParts.length - 1];
+      const isCreatePath = url.pathname.includes("/create/");
+      const looksLikeIssueKey = issueKeyCandidate && /[A-Z0-9]+-\d+/.test(issueKeyCandidate);
+      return {
+        issueKey: looksLikeIssueKey ? issueKeyCandidate : null,
+        success: !isCreatePath && looksLikeIssueKey,
+      };
+    } catch (e) {
+      return { issueKey: null, success: false };
+    }
+  };
+
+  // Poll the iframe location for success redirect
+  useEffect(() => {
+    if (!isDialogOpen || iframeStatus === "error") return;
+    const interval = window.setInterval(() => {
+      const frame = iframeRef.current;
+      if (!frame?.contentWindow) return;
+      try {
+        const href = frame.contentWindow.location?.href;
+        if (href && href !== lastKnownHref) {
+          setLastKnownHref(href);
+          const parsed = parseSuccessFromHref(href);
+          if (parsed.success) {
+            const requestDetails = selectedRequestType
+              ? { name: selectedRequestType.name, description: selectedRequestType.description }
+              : undefined;
+            handleSubmissionSuccess(href, parsed.issueKey, requestDetails);
+          }
+        }
+      } catch (e) {
+        // Cross-origin would land here; for our same-origin iframe this should not trigger
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [handleSubmissionSuccess, isDialogOpen, iframeStatus, lastKnownHref, selectedRequestType]);
+
+  const resetDialogState = useCallback(() => {
+    setIframeStatus("idle");
+    setCreatedIssueKey(null);
+    setPostSubmitUrl(null);
+    setLastKnownHref(null);
+    setLastSubmittedRequest(null);
+  }, []);
+
+  // Group request types by category and SORT them
   const groupedSections = useMemo(() => {
     if (!requestTypes.length) return [];
 
@@ -165,184 +483,4 @@ export function PortalRequestTypes(
 
     // 2. Map Group Names to IDs to lookup sort order
     const apiGroups = data?.groups || [];
-    const groupNameToId = new Map(apiGroups.map(g => [g.name, g.id]));
-
-    // 3. Sort Group Tabs
-    const sortedGroupNames = apiGroups.length > 0 
-      ? apiGroups.map(g => g.name) 
-      : Object.keys(sections).sort();
-
-    // 4. Sort Items Within Each Group
-    return sortedGroupNames
-      .filter(name => sections[name])
-      .map(name => {
-        const groupId = groupNameToId.get(name);
-        const sortedItems = [...sections[name]].sort((a, b) => {
-          // Look up specific order for this group ID
-          const orderA = groupId ? (a.groupOrderMap?.[groupId] ?? 999) : 999;
-          const orderB = groupId ? (b.groupOrderMap?.[groupId] ?? 999) : 999;
-          
-          if (orderA !== orderB) return orderA - orderB;
-          return a.name.localeCompare(b.name);
-        });
-        return { name, types: sortedItems };
-      });
-  }, [data?.groups, requestTypes]);
-
-  const [activeGroup, setActiveGroup] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (isCustomerPortal && groupedSections.length > 0 && !activeGroup) {
-      setActiveGroup(groupedSections[0].name);
-    }
-  }, [isCustomerPortal, groupedSections, activeGroup]);
-
-  // Handlers for click/dialog
-  const handleRequestTypeClick = (type: RequestTypeOption) => {
-    const base = getBootstrapBaseUrl();
-    if (!base) return;
-    const portalId = resolvedServiceDeskId || portalIdFromStore || "default";
-    const url = `${base}/servicedesk/customer/portal/${portalId}/create/${type.id}`;
-    
-    setIframeUrl(url);
-    setIframeStatus("loading");
-    setIsDialogOpen(true);
-    
-    if (onRouteChange && routeProjectKey) {
-      const effectiveIsLive = isCustomerPortal || isLiveFromStore;
-      const targetPath = buildRequestTypeUrl(effectiveIsLive, routeProjectKey, type.id, resolvedServiceDeskId ?? undefined);
-      onRouteChange(targetPath, false);
-    }
-  };
-
-  const renderTypeAvatar = (type: RequestTypeOption, sizeClass = "h-8 w-8") => (
-    <Avatar className={cn(sizeClass, "!rounded-none")}>
-      {type.iconUrl && <AvatarImage src={type.iconUrl} />}
-      <AvatarFallback className="text-xs font-medium !rounded-none">{type.name.charAt(0)}</AvatarFallback>
-    </Avatar>
-  );
-
-  const renderRequestTypes = (types: RequestTypeOption[]) => {
-    if (variant === "compact-list") {
-      return (
-        <div className="divide-y rounded-md border bg-background">
-          {types.map((type) => (
-            <button key={type.id} className="flex w-full items-start gap-3 px-3 py-3 text-left text-sm hover:bg-muted" onClick={() => handleRequestTypeClick(type)}>
-              <div className="mt-0.5">{renderTypeAvatar(type)}</div>
-              <div className="flex-1">
-                <div className="font-medium">{type.name}</div>
-                {type.description && <p className="text-xs text-muted-foreground line-clamp-2">{type.description}</p>}
-              </div>
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (variant === "accordion") {
-      return (
-        <Accordion type="single" collapsible className="w-full rounded-md border bg-background">
-          {types.map((type) => (
-            <AccordionItem key={type.id} value={type.id}>
-              <AccordionTrigger className="px-3 py-2">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5">{renderTypeAvatar(type)}</div>
-                  <div className="text-left"><div className="font-medium">{type.name}</div></div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-3 pb-3">
-                <Button size="sm" onClick={() => handleRequestTypeClick(type)}>Open request</Button>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      );
-    }
-
-    const columnCount = Math.min(Math.max(Number(columns) || 2, 1), 4);
-    return (
-      <div className={cn(layout === "grid" ? "grid gap-4" : "flex flex-col gap-4")}
-           style={layout === "grid" ? { gridTemplateColumns: `repeat(${columnCount}, minmax(260px, 1fr))` } : undefined}>
-        {types.map((type) => (
-          <Card key={type.id} className="cursor-pointer hover:shadow-md transition-all" onClick={() => handleRequestTypeClick(type)}>
-            <CardHeader className="space-y-2">
-              <div className="flex items-center gap-4">
-                {renderTypeAvatar(type, "h-7 w-7")}
-                <CardTitle className="text-lg font-semibold text-left">{type.name}</CardTitle>
-              </div>
-              {type.description && <CardDescription className="text-sm text-left line-clamp-2">{type.description}</CardDescription>}
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
-    );
-  };
-
-  return (
-    <div className="w-full space-y-6">
-      {(title || subtitle) && (
-        <div className="space-y-2">
-          {title && <h2 className="text-2xl font-bold">{title}</h2>}
-          {subtitle && <p className="text-muted-foreground">{subtitle}</p>}
-        </div>
-      )}
-
-      {isLoading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : showGroups && groupedSections.length > 1 ? (
-        groupLayout === "top-tabs" ? (
-          <Tabs value={activeGroup} onValueChange={setActiveGroup} className="w-full">
-            <TabsList className="flex flex-wrap h-auto bg-transparent gap-2 justify-start">
-              {groupedSections.map(s => (
-                <TabsTrigger key={s.name} value={s.name} className="px-3 py-1.5 border data-[state=active]:bg-muted">
-                  {s.name} <Badge variant="secondary" className="ml-2 rounded-full">{s.types.length}</Badge>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {groupedSections.map(s => (
-              <TabsContent key={s.name} value={s.name} className="mt-6">
-                {renderRequestTypes(s.types)}
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <div className="space-y-8">
-            {groupedSections.map(s => (
-              <div key={s.name} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">{s.name}</h3>
-                  <Badge variant="outline">{s.types.length} types</Badge>
-                </div>
-                <Separator />
-                {renderRequestTypes(s.types)}
-              </div>
-            ))}
-          </div>
-        )
-      ) : (
-        renderRequestTypes(requestTypes)
-      )}
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[800px] h-[90vh]">
-          {iframeUrl && (
-            <div className="relative h-full w-full">
-               {iframeStatus === "loading" && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-                  <Loader2 className="animate-spin h-8 w-8 text-primary" />
-                </div>
-              )}
-              <iframe
-                ref={iframeRef}
-                src={iframeUrl}
-                className="w-full h-full border-0 bg-white"
-                onLoad={() => setIframeStatus("ready")}
-                onError={() => setIframeStatus("error")}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+    const groupNameToId = new Map(apiGroups.map(g => [g.name,
