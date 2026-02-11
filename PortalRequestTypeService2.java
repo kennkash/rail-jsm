@@ -33,6 +33,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing Jira Service Management Request Types
+ * Provides methods to fetch, filter, and organize request types for portal display
+ */
 @Named
 public class PortalRequestTypeService {
 
@@ -60,42 +64,43 @@ public class PortalRequestTypeService {
         this.portalConfigService = portalConfigService;
     }
 
+    /**
+     * Get all request types for a specific project
+     */
     public RequestTypesResponseDTO getRequestTypesByProject(String projectKey) {
+        log.debug("Fetching request types for project: {}", projectKey);
+
         try {
             Project project = projectManager.getProjectObjByKey(projectKey);
-            if (project == null) return createEmptyResponse(projectKey);
+            if (project == null) {
+                log.warn("Project not found: {}", projectKey);
+                return createEmptyResponse(projectKey);
+            }
 
             ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
-            if (serviceDesk == null) return buildSampleResponse(projectKey, project.getName());
+            if (serviceDesk == null) {
+                log.warn("Service desk not found for project {}. Falling back to sample data.", projectKey);
+                return buildSampleResponse(projectKey, project.getName());
+            }
 
             List<RequestType> rawRequestTypes = loadRequestTypes(serviceDesk);
-            if (rawRequestTypes.isEmpty()) return buildSampleResponse(projectKey, project.getName());
+            if (rawRequestTypes.isEmpty()) {
+                log.warn("No request types returned by API for project {}. Falling back to sample data.", projectKey);
+                return buildSampleResponse(projectKey, project.getName());
+            }
 
             return buildResponseFromRequestTypes(project, serviceDesk, rawRequestTypes);
+
         } catch (Exception e) {
             log.error("Error fetching request types for project: {}", projectKey, e);
             return buildSampleResponse(projectKey, projectKey);
         }
     }
 
-    public RequestTypeDTO getRequestTypeById(String requestTypeId) {
-        try {
-            Integer numericId = Integer.valueOf(requestTypeId);
-            ApplicationUser user = authenticationContext.getLoggedInUser();
-            RequestTypeQuery query = jsdRequestTypeService.newQueryBuilder()
-                    .requestType(numericId)
-                    .requestOverrideSecurity(Boolean.TRUE)
-                    .build();
-            PagedResponse<RequestType> response = jsdRequestTypeService.getRequestTypes(user, query);
-            return response.findFirst().map(rt -> convertToDto(rt, null, null)).orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     private List<RequestType> loadRequestTypes(ServiceDesk serviceDesk) {
         List<RequestType> requestTypes = new ArrayList<>();
-        ApplicationUser user = authenticationContext.getLoggedInUser();
+        ApplicationUser user = authenticationContext != null ? authenticationContext.getLoggedInUser() : null;
+
         int start = 0;
         boolean hasMore = true;
 
@@ -109,12 +114,14 @@ public class PortalRequestTypeService {
 
             PagedResponse<RequestType> response = jsdRequestTypeService.getRequestTypes(user, query);
             requestTypes.addAll(response.getResults());
+
             if (response.hasNextPage()) {
                 start += PAGE_SIZE;
             } else {
                 hasMore = false;
             }
         }
+
         return requestTypes;
     }
 
@@ -130,10 +137,11 @@ public class PortalRequestTypeService {
                     RequestTypeGroupDTO groupDTO = groupMap.computeIfAbsent(
                             group.getId(),
                             id -> {
-                                RequestTypeGroupDTO dg = new RequestTypeGroupDTO(String.valueOf(id), group.getName());
-                                group.getOrder().ifPresent(dg::setDisplayOrder);
-                                dg.setRequestTypeCount(0);
-                                return dg;
+                                RequestTypeGroupDTO dtoGroup = new RequestTypeGroupDTO(String.valueOf(id), group.getName());
+                                dtoGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
+                                group.getOrder().ifPresent(dtoGroup::setDisplayOrder);
+                                dtoGroup.setRequestTypeCount(0);
+                                return dtoGroup;
                             }
                     );
 
@@ -141,18 +149,24 @@ public class PortalRequestTypeService {
                     dto.getGroupIds().add(String.valueOf(group.getId()));
                     dto.getGroups().add(groupDTO.getName());
 
-                    // SET RT ORDER WITHIN GROUP
+                    // FIX: Populate the groupOrderMap with the relative order in this specific group
                     group.getRequestTypeOrder(requestType.getId()).ifPresent(order -> {
                         dto.getGroupOrderMap().put(String.valueOf(group.getId()), order);
-                        if (dto.getDisplayOrder() == null) dto.setDisplayOrder(order);
+                        if (dto.getDisplayOrder() == null) {
+                            dto.setDisplayOrder(order);
+                        }
                     });
 
-                    if (dto.getGroup() == null) dto.setGroup(groupDTO.getName());
+                    if (dto.getGroup() == null) {
+                        dto.setGroup(groupDTO.getName());
+                    }
                 }
             }
+
             dtoList.add(dto);
         }
 
+        // FIX: Sort groups by display order before sending to frontend
         List<RequestTypeGroupDTO> sortedGroups = new ArrayList<>(groupMap.values());
         sortedGroups.sort(Comparator.comparingInt(g -> g.getDisplayOrder() != null ? g.getDisplayOrder() : 999));
 
@@ -173,23 +187,23 @@ public class PortalRequestTypeService {
         dto.setHelpText(requestType.getHelpText());
         dto.setIssueTypeId(String.valueOf(requestType.getIssueTypeId()));
         dto.setPortalId(String.valueOf(requestType.getPortalId()));
+        dto.setEnabled(true);
         dto.setProjectKey(project != null ? project.getKey() : null);
         dto.setServiceDeskId(serviceDesk != null ? String.valueOf(serviceDesk.getId()) : null);
         return dto;
     }
 
     private RequestTypesResponseDTO createEmptyResponse(String projectKey) {
-        RequestTypesResponseDTO r = new RequestTypesResponseDTO();
-        r.setProjectKey(projectKey);
-        r.setRequestTypes(Collections.emptyList());
-        r.setGroups(Collections.emptyList());
-        return r;
+        RequestTypesResponseDTO response = new RequestTypesResponseDTO();
+        response.setProjectKey(projectKey);
+        response.setRequestTypes(Collections.emptyList());
+        response.setGroups(Collections.emptyList());
+        response.setTotalCount(0);
+        response.setHasGroups(false);
+        return response;
     }
 
     private RequestTypesResponseDTO buildSampleResponse(String projectKey, String projectName) {
-        RequestTypesResponseDTO r = new RequestTypesResponseDTO(new ArrayList<>(), new ArrayList<>());
-        r.setProjectKey(projectKey);
-        r.setProjectName(projectName);
-        return r;
+        return createEmptyResponse(projectKey);
     }
 }
