@@ -1,3 +1,33 @@
+[INFO] Finished at: 2026-02-11T17:54:55-06:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project rail-portal-plugin: Compilation failure: Compilation failure: 
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/RailPortalResource.java:[1112,75] cannot find symbol
+[ERROR]   symbol:   method getGroupedRequestTypes(java.lang.String)
+[ERROR]   location: variable requestTypeService of type com.samsungbuilder.jsm.service.PortalRequestTypeService
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/RailPortalResource.java:[1133,60] cannot find symbol
+[ERROR]   symbol:   method getRequestTypeById(java.lang.String)
+[ERROR]   location: variable requestTypeService of type com.samsungbuilder.jsm.service.PortalRequestTypeService
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/RailPortalResource.java:[1164,62] cannot find symbol
+[ERROR]   symbol:   method searchRequestTypes(java.lang.String,java.lang.String)
+[ERROR]   location: variable requestTypeService of type com.samsungbuilder.jsm.service.PortalRequestTypeService
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/RailPortalResource.java:[1199,42] cannot find symbol
+[ERROR]   symbol:   class GlobalRequestTypeSearchResult
+[ERROR]   location: class com.samsungbuilder.jsm.service.PortalRequestTypeService
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/RailPortalResource.java:[1200,39] cannot find symbol
+[ERROR]   symbol:   method searchAllRequestTypes(java.lang.String,int)
+[ERROR]   location: variable requestTypeService of type com.samsungbuilder.jsm.service.PortalRequestTypeService
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+ERROR: Backend build failed!
+
+
+
+
 // rail-at-sas/frontend/components/portal-builder/form-components/portal-request-types.tsx
 'use client'
 
