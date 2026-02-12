@@ -1,5 +1,4 @@
 /* rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/service/IssueService.java  */
-
 package com.samsungbuilder.jsm.service;
 
 import com.atlassian.jira.avatar.Avatar;
@@ -21,6 +20,7 @@ import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.atlassian.query.Query;
 import com.atlassian.servicedesk.api.ServiceDesk;
 import com.atlassian.servicedesk.api.ServiceDeskManager;
+import com.atlassian.jira.component.ComponentAccessor;
 import com.atlassian.servicedesk.api.request.CustomerRequest;
 import com.atlassian.servicedesk.api.request.CustomerRequestQuery;
 import com.atlassian.servicedesk.api.request.ServiceDeskCustomerRequestService;
@@ -559,6 +559,18 @@ public class IssueService {
         if (project != null) {
             dto.setProjectKey(project.getKey());
             dto.setProjectName(project.getName());
+
+            // --- ADDED: Resolve Service Desk ID for Portal Linking ---
+            try {
+                ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
+                if (serviceDesk != null) {
+                    String portalId = String.valueOf(serviceDesk.getId());
+                    dto.setServiceDeskId(portalId);
+                }
+            } catch (Exception e) {
+                log.warn("Could not resolve Service Desk ID for issue {}: {}", issue.getKey(), e.getMessage());
+            }
+            // ---------------------------------------------------------
         }
         
         // Status information
