@@ -443,558 +443,157 @@ public class RailPortalResource {
         }
     }
 
-    // ==================== TEMP-DEBUG: New Portal Data Endpoints (Map-wrapped) ====================
+   // ==================== Issue Search Endpoints ====================
 
     /**
-     * TEMP-DEBUG: Get portal data using Map wrapping (proven working pattern from diagnostic endpoint)
-     * GET /rest/rail/1.0/portal-data/{projectKey}
-     */
-    @GET
-    @Path("portal-data/{projectKey}")
-    public Response getPortalDataWrapped(@PathParam("projectKey") String projectKey) {
-        log.info("TEMP-DEBUG: GET /portal-data/{} - Map-wrapped endpoint", projectKey);
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            Map<String, Object> response = new HashMap<>();
-            Optional<PortalConfigDTO> config = portalConfigService.getPortalConfig(projectKey);
-
-            if (config.isPresent()) {
-                PortalConfigDTO dto = config.get();
-
-                // FIX: Manually convert DTO to Map to bypass Jackson serialization issues
-                Map<String, Object> configMap = new HashMap<>();
-                configMap.put("projectKey", dto.getProjectKey());
-                configMap.put("projectName", dto.getProjectName());
-                configMap.put("portalId", dto.getPortalId());
-                configMap.put("portalTitle", dto.getPortalTitle());
-                configMap.put("live", dto.isLive());
-                configMap.put("components", dto.getComponents());
-                configMap.put("requestTypeGroups", dto.getRequestTypeGroups());
-                configMap.put("updatedAt", dto.getUpdatedAt());
-
-                response.put("success", true);
-                response.put("source", "database");
-                response.put("config", configMap); // Return Map instead of DTO
-                response.put("debug", Map.of(
-                    "hasComponents", dto.getComponents() != null,
-                    "componentCount", dto.getComponents() != null ? dto.getComponents().size() : 0,
-                    "projectKey", dto.getProjectKey(),
-                    "portalId", dto.getPortalId(),
-                    "message", "DTO converted to Map to bypass Jackson serialization"
-                ));
-                log.info("  Found config with {} components, converted to Map", dto.getComponents() != null ? dto.getComponents().size() : 0);
-            } else {
-                PortalConfigDTO sample = buildSamplePortalConfig(projectKey, null);
-                portalConfigService.savePortalConfig(projectKey, sample);
-
-                // Convert sample to Map too
-                Map<String, Object> configMap = new HashMap<>();
-                configMap.put("projectKey", sample.getProjectKey());
-                configMap.put("projectName", sample.getProjectName());
-                configMap.put("portalId", sample.getPortalId());
-                configMap.put("portalTitle", sample.getPortalTitle());
-                configMap.put("live", sample.isLive());
-                configMap.put("components", sample.getComponents());
-                configMap.put("requestTypeGroups", sample.getRequestTypeGroups());
-                configMap.put("updatedAt", sample.getUpdatedAt());
-
-                response.put("success", true);
-                response.put("source", "generated-sample");
-                response.put("config", configMap);
-                response.put("debug", Map.of(
-                    "componentCount", sample.getComponents().size(),
-                    "message", "No config found, created sample and converted to Map"
-                ));
-                log.info("  Created sample config with {} components, converted to Map", sample.getComponents().size());
-            }
-
-            response.put("timestamp", System.currentTimeMillis());
-            return Response.ok(response).build();
-
-        } catch (Exception e) {
-            log.error("TEMP-DEBUG: Error in portal-data endpoint", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-            error.put("timestamp", System.currentTimeMillis());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
-        }
-    }
-
-    /**
-     * TEMP-DEBUG: Save portal data using Map wrapping
-     * POST /rest/rail/1.0/portal-data/{projectKey}
-     */
-    @POST
-    @Path("portal-data/{projectKey}")
-    public Response savePortalDataWrapped(@PathParam("projectKey") String projectKey, PortalConfigDTO config) {
-        log.info("TEMP-DEBUG: POST /portal-data/{} - Map-wrapped save", projectKey);
-        log.info("  Received components: {}", config.getComponents() != null ? config.getComponents().size() : 0);
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            PortalConfigDTO saved = portalConfigService.savePortalConfig(projectKey, config);
-
-            // FIX: Manually convert DTO to Map to bypass Jackson serialization issues
-            Map<String, Object> configMap = new HashMap<>();
-            configMap.put("projectKey", saved.getProjectKey());
-            configMap.put("projectName", saved.getProjectName());
-            configMap.put("portalId", saved.getPortalId());
-            configMap.put("portalTitle", saved.getPortalTitle());
-            configMap.put("live", saved.isLive());
-            configMap.put("components", saved.getComponents());
-            configMap.put("requestTypeGroups", saved.getRequestTypeGroups());
-            configMap.put("updatedAt", saved.getUpdatedAt());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("config", configMap); // Return Map instead of DTO
-            response.put("debug", Map.of(
-                "receivedComponents", config.getComponents() != null ? config.getComponents().size() : 0,
-                "savedComponents", saved.getComponents() != null ? saved.getComponents().size() : 0,
-                "projectKey", saved.getProjectKey(),
-                "portalId", saved.getPortalId(),
-                "message", "DTO converted to Map to bypass Jackson serialization"
-            ));
-            response.put("timestamp", System.currentTimeMillis());
-
-            log.info("  Saved successfully with {} components, converted to Map", saved.getComponents() != null ? saved.getComponents().size() : 0);
-            log.info("  Response map keys: {}", response.keySet());
-
-            return Response.ok(response).build();
-
-        } catch (Exception e) {
-            log.error("TEMP-DEBUG: Error saving portal data", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-            error.put("timestamp", System.currentTimeMillis());
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
-        }
-    }
-
-    // ==================== Portal Config Endpoints ====================
-
-    /**
-     * Fetch portal configuration for a project key.
+     * Search issues using JQL query with optional server-side search and filter.
      *
-     * FIX: Returns Map instead of DTO to bypass JAX-RS Jackson serialization issues.
-     * JAX-RS uses a different Jackson ObjectMapper than PortalConfigService, which
-     * strips all fields except 'live' from the response. Converting to Map works around this.
+     * Server-side search/filter enables searching across the ENTIRE result set,
+     * not just the current page. This fixes the issue where search only worked
+     * on visible issues.
+     *
+     * GET /rest/rail/1.0/issues/search?jql=query&start=0&limit=25&search=term&status=Open,Done&priority=High
+     *
+     * @param jqlQuery The JQL query (required)
+     * @param startIndex Pagination start index (default: 0)
+     * @param pageSize Number of results per page (default: 25)
+     * @param searchTerm Optional text search (searches key, summary, description)
+     * @param statusFilter Optional comma-separated status names to filter by
+     * @param priorityFilter Optional comma-separated priority names to filter by
      */
     @GET
-    @Path("portals/project/{projectKey}")
-    public Response getPortalConfigForProject(@PathParam("projectKey") String projectKey) {
-        log.info("GET /portals/project/{} - Fetching portal configuration", projectKey);
+    @Path("issues/search")
+    public Response searchIssues(
+            @QueryParam("jql") String jqlQuery,
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize,
+            @QueryParam("search") String searchTerm,
+            @QueryParam("status") String statusFilter,
+            @QueryParam("priority") String priorityFilter) {
+        log.debug("GET /issues/search?jql={}&start={}&limit={}&search={}&status={}&priority={}",
+                  jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
 
-        Optional<PortalConfigDTO> config = portalConfigService.getPortalConfig(projectKey);
-
-        if (config.isPresent()) {
-            PortalConfigDTO dto = config.get();
-            log.info("  Config exists - hasComponents: {}, componentsSize: {}",
-                     dto.getComponents() != null,
-                     dto.getComponents() != null ? dto.getComponents().size() : 0);
-
-            // DIAGNOSTIC: Log the DTO before serialization
-            log.info("  DTO before serialization - projectKey: {}, portalId: {}, live: {}, componentsSize: {}",
-                     dto.getProjectKey(), dto.getPortalId(), dto.isLive(),
-                     dto.getComponents() != null ? dto.getComponents().size() : "null");
-
-            // FIX: Convert DTO to Map to bypass Jackson serialization issues
-            Map<String, Object> configMap = convertDtoToMap(dto);
-
-            log.info("  Returning Map with {} components",
-                     ((List<?>) configMap.get("components")).size());
-
-            return Response.ok(configMap).build();
+        if (jqlQuery == null || jqlQuery.trim().isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(createErrorResponse("JQL query parameter is required"))
+                    .build();
         }
-
-        log.info("  No config found - creating sample config");
-        PortalConfigDTO sample = buildSamplePortalConfig(projectKey, null);
-        portalConfigService.savePortalConfig(projectKey, sample);
-        log.info("  Sample config created and saved with {} components", sample.getComponents().size());
-
-        // FIX: Convert sample to Map as well
-        Map<String, Object> sampleMap = convertDtoToMap(sample);
-        return Response.ok(sampleMap).build();
-    }
-
-    /**
-     * Diagnostic endpoint to check raw portal data without serialization issues
-     * GET /rest/rail/1.0/portals/project/{projectKey}/diagnostic
-     */
-    @GET
-    @Path("portals/project/{projectKey}/diagnostic")
-    public Response getPortalConfigDiagnostic(@PathParam("projectKey") String projectKey) {
-        log.info("GET /portals/project/{}/diagnostic - Diagnostic check", projectKey);
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        Map<String, Object> diagnostic = new HashMap<>();
-        diagnostic.put("projectKey", projectKey);
-        diagnostic.put("timestamp", System.currentTimeMillis());
 
         try {
-            Optional<PortalConfigDTO> config = portalConfigService.getPortalConfig(projectKey);
+            IssueSearchResponseDTO response = issueService.searchIssues(
+                    jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
 
-            if (config.isPresent()) {
-                PortalConfigDTO dto = config.get();
-                diagnostic.put("configExists", true);
-                diagnostic.put("dtoProjectKey", dto.getProjectKey());
-                diagnostic.put("dtoPortalId", dto.getPortalId());
-                diagnostic.put("dtoLive", dto.isLive());
-                diagnostic.put("dtoComponentsNull", dto.getComponents() == null);
-                diagnostic.put("dtoComponentsSize", dto.getComponents() != null ? dto.getComponents().size() : 0);
-                diagnostic.put("dtoRequestTypeGroupsNull", dto.getRequestTypeGroups() == null);
-                diagnostic.put("dtoRequestTypeGroupsSize", dto.getRequestTypeGroups() != null ? dto.getRequestTypeGroups().size() : 0);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid JQL query: {}", jqlQuery, e);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(createErrorResponse("Invalid JQL query: " + e.getMessage()))
+                    .build();
 
-                // Wrap the actual DTO in a Map to bypass any serialization issues
-                Map<String, Object> wrappedConfig = new HashMap<>();
-                wrappedConfig.put("projectKey", dto.getProjectKey());
-                wrappedConfig.put("projectName", dto.getProjectName());
-                wrappedConfig.put("portalId", dto.getPortalId());
-                wrappedConfig.put("portalTitle", dto.getPortalTitle());
-                wrappedConfig.put("live", dto.isLive());
-                wrappedConfig.put("components", dto.getComponents());
-                wrappedConfig.put("requestTypeGroups", dto.getRequestTypeGroups());
-                wrappedConfig.put("updatedAt", dto.getUpdatedAt());
-
-                diagnostic.put("config", wrappedConfig);
-            } else {
-                diagnostic.put("configExists", false);
-                diagnostic.put("message", "No config found in database");
-            }
-
-            return Response.ok(diagnostic).build();
         } catch (Exception e) {
-            diagnostic.put("error", e.getMessage());
-            diagnostic.put("errorClass", e.getClass().getName());
-            log.error("Diagnostic endpoint error for project: " + projectKey, e);
-            return Response.ok(diagnostic).build();
-        }
-    }
-
-    @GET
-    @Path("portals/{keyOrId}")
-    public Response getPortalConfigFlexible(@PathParam("keyOrId") String keyOrId) {
-        if (keyOrId == null || keyOrId.trim().isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("Portal identifier is required"))
-                    .build();
-        }
-
-        String trimmed = keyOrId.trim();
-        if (trimmed.toLowerCase(Locale.ENGLISH).endsWith("-portal")) {
-            return getPortalConfigByIdInternal(trimmed);
-        }
-        return getPortalConfigForProject(trimmed);
-    }
-
-    /**
-     * Toggle portal live flag.
-     */
-    @POST
-    @Path("portals/project/{projectKey}/live")
-    public Response setPortalLive(
-            @PathParam("projectKey") String projectKey,
-            Map<String, Object> body
-    ) {
-        boolean live = body != null && Boolean.TRUE.equals(body.get("live"));
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            PortalConfigDTO updated = portalConfigService.updateLiveState(projectKey, live);
-            // FIX: Convert to Map to bypass Jackson serialization issues
-            return Response.ok(convertDtoToMap(updated)).build();
-        } catch (IllegalArgumentException ex) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(createErrorResponse(ex.getMessage()))
-                    .build();
-        }
-    }
-
-
-    @GET
-    @Path("portals/by-id/{portalId}")
-    public Response getPortalConfigById(@PathParam("portalId") String portalId) {
-        return getPortalConfigByIdInternal(portalId);
-    }
-
-    private Response getPortalConfigByIdInternal(String portalId) {
-        Optional<PortalConfigDTO> config = portalConfigService.getPortalConfigByPortalId(portalId);
-        if (config.isPresent()) {
-            PortalConfigDTO dto = config.get();
-            // FIX: Convert to Map to bypass Jackson serialization issues
-            return Response.ok(convertDtoToMap(dto)).build();
-        }
-
-        PortalConfigDTO sample = buildSamplePortalConfig(null, portalId);
-        if (sample.getProjectKey() != null) {
-            portalConfigService.savePortalConfig(sample.getProjectKey(), sample);
-        }
-        // FIX: Convert to Map to bypass Jackson serialization issues
-        return Response.ok(convertDtoToMap(sample)).build();
-    }
-
-    @POST
-    @Path("portals/project/{projectKey}")
-    public Response savePortalConfig(@PathParam("projectKey") String projectKey, PortalConfigDTO config) {
-        if (config == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("Portal payload is required"))
-                    .build();
-        }
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            log.info("POST /portals/project/{} - Saving portal config", projectKey);
-            log.info("  Received components count: {}", config.getComponents() != null ? config.getComponents().size() : 0);
-
-            PortalConfigDTO saved = portalConfigService.savePortalConfig(projectKey, config);
-
-            log.info("  Saved successfully - components count: {}", saved.getComponents() != null ? saved.getComponents().size() : 0);
-            log.info("  Returning saved config with projectKey: {}, portalId: {}", saved.getProjectKey(), saved.getPortalId());
-
-            // FIX: Convert to Map to bypass Jackson serialization issues
-            return Response.ok(convertDtoToMap(saved)).build();
-        } catch (IllegalArgumentException ex) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(createErrorResponse(ex.getMessage()))
+            log.error("Error searching issues with JQL: {}", jqlQuery, e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Issue search failed: " + e.getMessage()))
                     .build();
         }
     }
 
     /**
-     * Upload an image/file to be used by portal components. Stored as an attachment
-     * on a hidden project issue and served back via a proxy endpoint.
+     * Get issues for a specific project (current user's issues)
+     * GET /rest/rail/1.0/projects/{projectKey}/issues?start=0&limit=25
      */
-    @POST
-    @Path("portals/project/{projectKey}/assets")
-    @Consumes(MediaType.WILDCARD)
-    public Response uploadPortalAsset(
+    @GET
+    @Path("projects/{projectKey}/issues")
+    public Response getProjectIssues(
             @PathParam("projectKey") String projectKey,
-            @QueryParam("filename") String filename,
-            @QueryParam("contentType") @DefaultValue("application/octet-stream") String contentType,
-            InputStream body) {
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues?start={}&limit={}", projectKey, startIndex, pageSize);
 
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        if (body == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("No file provided"))
-                    .build();
-        }
-
-        String safeName = filename != null ? filename.trim() : "";
-        if (safeName.isEmpty()) {
-            safeName = "upload.bin";
-        }
-
-        byte[] payload;
         try {
-            payload = readLimited(body, 5 * 1024 * 1024); // 5 MB limit
-        } catch (IllegalStateException sizeEx) {
-            return Response.status(413)
-                    .entity(createErrorResponse(sizeEx.getMessage()))
-                    .build();
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
+            }
+
+            IssueSearchResponseDTO response = issueService.searchProjectIssues(projectKey, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
+
         } catch (Exception e) {
-            log.error("Failed to read upload stream for project {}", projectKey, e);
+            log.error("Error fetching issues for project: {}", projectKey, e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Unable to read upload"))
-                    .build();
-        }
-
-        if (payload.length == 0) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("Empty file"))
-                    .build();
-        }
-
-        try {
-            Attachment attachment = portalAssetService.upload(projectKey, safeName, contentType, payload);
-            String encodedKey = projectKey;
-            try {
-                encodedKey = URLEncoder.encode(projectKey, StandardCharsets.UTF_8.toString());
-            } catch (Exception ignore) {
-                // Fallback to raw project key if encoding somehow fails
-            }
-            String downloadUrl = String.format(
-                    "/rest/rail/1.0/portals/project/%s/assets/%s",
-                    encodedKey,
-                    attachment.getId()
-            );
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("attachmentId", attachment.getId());
-            response.put("fileName", attachment.getFilename());
-            response.put("size", attachment.getFilesize());
-            response.put("contentType", attachment.getMimetype());
-            response.put("downloadUrl", downloadUrl);
-            return Response.ok(response).build();
-        } catch (Exception e) {
-            log.error("Upload failed for project {}", projectKey, e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Unable to store file: " + e.getMessage()))
+                    .entity(createErrorResponse("Error fetching project issues: " + e.getMessage()))
                     .build();
         }
     }
 
     /**
-     * Stream a previously uploaded asset back to the browser.
+     * Get all issues for a specific project (that user can see)
+     * GET /rest/rail/1.0/projects/{projectKey}/issues/all?start=0&limit=25
      */
     @GET
-    @Path("portals/project/{projectKey}/assets/{attachmentId}")
-    @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    public Response downloadPortalAsset(
+    @Path("projects/{projectKey}/issues/all")
+    public Response getAllProjectIssues(
             @PathParam("projectKey") String projectKey,
-            @PathParam("attachmentId") long attachmentId) {
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues/all?start={}&limit={}", projectKey, startIndex, pageSize);
 
-        ApplicationUser user = authenticationContext.getLoggedInUser();
-        if (user == null) {
-            return Response.status(Response.Status.UNAUTHORIZED)
-                    .entity(createErrorResponse("Authentication required"))
-                    .build();
-        }
-
-        Optional<Attachment> attachmentOpt = portalAssetService.getAttachment(attachmentId, projectKey);
-        if (!attachmentOpt.isPresent()) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(createErrorResponse("Attachment not found"))
-                    .build();
-        }
-
-        Attachment attachment = attachmentOpt.get();
-
-        StreamingOutput stream = output -> {
-            try (InputStream in = portalAssetService.openAttachmentStream(attachment)) {
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = in.read(buffer)) != -1) {
-                    output.write(buffer, 0, len);
-                }
+        try {
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
             }
-        };
 
-        return Response.ok(stream)
-                .header("Content-Type", attachment.getMimetype() != null ? attachment.getMimetype() : MediaType.APPLICATION_OCTET_STREAM)
-                .header("Content-Disposition", "inline; filename=\"" + attachment.getFilename() + "\"")
-                .header("Cache-Control", "private, max-age=3600")
-                .build();
+            IssueSearchResponseDTO response = issueService.searchAllProjectIssues(projectKey, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
+
+        } catch (Exception e) {
+            log.error("Error fetching all issues for project: {}", projectKey, e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error fetching project issues: " + e.getMessage()))
+                    .build();
+        }
     }
 
-
-    // ==================== Portal History Endpoints ====================
-
     /**
-     * Get portal history for a project
-     * GET /rest/rail/1.0/portals/project/{projectKey}/history
+     * Get issues for a specific project with additional filter
+     * GET /rest/rail/1.0/projects/{projectKey}/issues/filter?filter=status=Open&start=0&limit=25
      */
     @GET
-    @Path("portals/project/{projectKey}/history")
-    public Response getPortalHistory(@PathParam("projectKey") String projectKey) {
-
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
+    @Path("projects/{projectKey}/issues/filter")
+    public Response getProjectIssuesWithFilter(
+            @PathParam("projectKey") String projectKey,
+            @QueryParam("filter") String additionalFilter,
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues/filter?filter={}&start={}&limit={}", projectKey, additionalFilter, startIndex, pageSize);
 
         try {
-            Optional<PortalHistoryDTO> history = portalConfigService.getPortalHistory(projectKey);
-            if (history.isPresent()) {
-                return Response.ok(history.get()).build();
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
             }
 
-            // Return empty history if none exists
-            PortalHistoryDTO emptyHistory = new PortalHistoryDTO();
-            emptyHistory.setProjectKey(projectKey);
-            emptyHistory.setUpdatedAt(System.currentTimeMillis());
-            return Response.ok(emptyHistory).build();
+            IssueSearchResponseDTO response = issueService.searchProjectIssuesWithFilter(projectKey, additionalFilter, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
 
-        } catch (Exception ex) {
-            log.error("Error fetching portal history for project: " + projectKey, ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Error fetching portal history: " + ex.getMessage()))
-                    .build();
-        }
-    }
-
-    /**
-     * Save portal history for a project
-     * POST /rest/rail/1.0/portals/project/{projectKey}/history
-     */
-    @POST
-    @Path("portals/project/{projectKey}/history")
-    public Response savePortalHistory(@PathParam("projectKey") String projectKey, PortalHistoryDTO history) {
-        if (history == null) {
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid filter for project {}: {}", projectKey, additionalFilter, e);
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("History payload is required"))
+                    .entity(createErrorResponse("Invalid filter: " + e.getMessage()))
                     .build();
-        }
 
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            portalConfigService.savePortalHistory(projectKey, history);
-            // Frontend only cares about success/failure, not the payload
-            // Use 204 No Content to avoid serializing PortalHistoryDTO
-            return Response.noContent().build();
-        } catch (IllegalArgumentException ex) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(createErrorResponse(ex.getMessage()))
-                    .build();
-        } catch (Exception ex) {
-            log.error("Error saving portal history for project: " + projectKey, ex);
+        } catch (Exception e) {
+            log.error("Error fetching filtered issues for project: {}", projectKey, e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Error saving portal history: " + ex.getMessage()))
-                    .build();
-        }
-    }
-
-    /**
-     * Delete portal history for a project
-     * DELETE /rest/rail/1.0/portals/project/{projectKey}/history
-     */
-    @DELETE
-    @Path("portals/project/{projectKey}/history")
-    public Response deletePortalHistory(@PathParam("projectKey") String projectKey) {
-        Response denial = enforceProjectAdmin(projectKey);
-        if (denial != null) {
-            return denial;
-        }
-
-        try {
-            portalConfigService.deletePortalHistory(projectKey);
-            return Response.noContent().build();
-        } catch (Exception ex) {
-            log.error("Error deleting portal history for project: " + projectKey, ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Error deleting portal history: " + ex.getMessage()))
+                    .entity(createErrorResponse("Error fetching filtered project issues: " + e.getMessage()))
                     .build();
         }
     }
