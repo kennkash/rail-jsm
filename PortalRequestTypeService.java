@@ -26,6 +26,8 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,7 +44,7 @@ import java.util.stream.Collectors;
 public class PortalRequestTypeService {
 
     private static final Logger log = LoggerFactory.getLogger(PortalRequestTypeService.class);
-    private static final int PAGE_SIZE = 50;
+    private static final int PAGE_SIZE = 100;
 
     private final ProjectManager projectManager;
     private final ServiceDeskManager serviceDeskManager;
@@ -81,46 +83,36 @@ public class PortalRequestTypeService {
                 return createEmptyResponse(projectKey);
             }
 
-            if (jsdRequestTypeService == null || serviceDeskManager == null) {
-                log.warn("Jira Service Management APIs not available. Falling back to sample data.");
-                return buildSampleResponse(projectKey, project.getName());
-            }
-
             ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
             if (serviceDesk == null) {
-                log.warn("Service desk not found for project {}. Falling back to sample data.", projectKey);
-                return buildSampleResponse(projectKey, project.getName());
+                log.warn("Service desk not found for project {}", projectKey);
+                return createEmptyResponse(projectKey);
             }
 
-            List<RequestType> rawRequestTypes = loadRequestTypes(serviceDesk);
-            if (rawRequestTypes.isEmpty()) {
-                log.warn("No request types returned by API for project {}. Falling back to sample data.", projectKey);
-                return buildSampleResponse(projectKey, project.getName());
+            // 1. Load ALL request types (Unsorted globally, but contains all data)
+            List<RequestType> allRequestTypes = loadAllRequestTypes(serviceDesk);
+
+            if (allRequestTypes.isEmpty()) {
+                return createEmptyResponse(projectKey);
             }
 
-            return buildResponseFromRequestTypes(project, serviceDesk, rawRequestTypes);
+            // 2. Build the response and apply Sorting logic
+            return buildResponseAndSort(project, serviceDesk, allRequestTypes);
 
         } catch (Exception e) {
             log.error("Error fetching request types for project: {}", projectKey, e);
-            return buildSampleResponse(projectKey, projectKey);
+            return createEmptyResponse(projectKey);
         }
     }
 
     /**
      * Get a single request type by ID
-     *
-     * @param requestTypeId The request type ID
-     * @return Request type DTO or null if not found
      */
     public RequestTypeDTO getRequestTypeById(String requestTypeId) {
         log.debug("Fetching request type by ID: {}", requestTypeId);
 
         if (jsdRequestTypeService == null) {
-            log.warn("Jira Service Management APIs not available. Falling back to sample data lookup.");
-            return getSampleRequestTypes("sample").stream()
-                    .filter(rt -> Objects.equals(rt.getId(), requestTypeId))
-                    .findFirst()
-                    .orElse(null);
+            return null;
         }
 
         try {
@@ -145,9 +137,6 @@ public class PortalRequestTypeService {
 
     /**
      * Get request types grouped by category
-     *
-     * @param projectKey The project key
-     * @return Map of group name to request types
      */
     public Map<String, List<RequestTypeDTO>> getGroupedRequestTypes(String projectKey) {
         log.debug("Fetching grouped request types for project: {}", projectKey);
@@ -156,8 +145,15 @@ public class PortalRequestTypeService {
         Map<String, List<RequestTypeDTO>> grouped = new LinkedHashMap<>();
 
         for (RequestTypeDTO requestType : response.getRequestTypes()) {
-            String group = requestType.getGroup() != null ? requestType.getGroup() : "Other";
-            grouped.computeIfAbsent(group, k -> new ArrayList<>()).add(requestType);
+            // If it belongs to multiple groups, add it to all of them
+            if (requestType.getGroups() != null && !requestType.getGroups().isEmpty()) {
+                for (String groupName : requestType.getGroups()) {
+                    grouped.computeIfAbsent(groupName, k -> new ArrayList<>()).add(requestType);
+                }
+            } else {
+                String group = requestType.getGroup() != null ? requestType.getGroup() : "Other";
+                grouped.computeIfAbsent(group, k -> new ArrayList<>()).add(requestType);
+            }
         }
 
         return grouped;
@@ -165,10 +161,6 @@ public class PortalRequestTypeService {
 
     /**
      * Search request types by name or description
-     *
-     * @param projectKey The project key
-     * @param searchTerm The search term
-     * @return List of matching request types
      */
     public List<RequestTypeDTO> searchRequestTypes(String projectKey, String searchTerm) {
         log.debug("Searching request types for '{}' in project {}", searchTerm, projectKey);
@@ -186,229 +178,7 @@ public class PortalRequestTypeService {
     }
 
     /**
-     * Filter request types by group
-     *
-     * @param projectKey The project key
-     * @param groupName  The group name to filter by
-     * @return List of request types in the group
-     */
-    public List<RequestTypeDTO> getRequestTypesByGroup(String projectKey, String groupName) {
-        log.debug("Fetching request types for group '{}' in project {}", groupName, projectKey);
-
-        return getRequestTypesByProject(projectKey).getRequestTypes().stream()
-                .filter(rt -> Objects.equals(groupName, rt.getGroup()))
-                .collect(Collectors.toList());
-    }
-
-    private List<RequestType> loadRequestTypes(ServiceDesk serviceDesk) {
-        List<RequestType> requestTypes = new ArrayList<>();
-        ApplicationUser user = authenticationContext != null ? authenticationContext.getLoggedInUser() : null;
-
-        int start = 0;
-        boolean hasMore = true;
-
-        while (hasMore) {
-            RequestTypeQuery query = jsdRequestTypeService.newQueryBuilder()
-                    .serviceDesk(serviceDesk.getId())
-                    .pagedRequest(SimplePagedRequest.paged(start, PAGE_SIZE))
-                    .requestOverrideSecurity(Boolean.TRUE)
-                    .filterHidden(Boolean.TRUE)
-                    .build();
-
-            PagedResponse<RequestType> response = jsdRequestTypeService.getRequestTypes(user, query);
-            requestTypes.addAll(response.getResults());
-
-            if (response.hasNextPage()) {
-                PagedRequest pagedRequest = response.getPagedRequest();
-                start = pagedRequest.getStart() + pagedRequest.getLimit();
-            } else {
-                hasMore = false;
-            }
-        }
-
-        return requestTypes;
-    }
-
-    private RequestTypesResponseDTO buildResponseFromRequestTypes(Project project, ServiceDesk serviceDesk, List<RequestType> requestTypes) {
-        List<RequestTypeDTO> dtoList = new ArrayList<>();
-        Map<Integer, RequestTypeGroupDTO> groupMap = new LinkedHashMap<>();
-
-        for (RequestType requestType : requestTypes) {
-            RequestTypeDTO dto = convertToDto(requestType, project, serviceDesk);
-
-            if (requestType.getGroups() != null && !requestType.getGroups().isEmpty()) {
-                for (RequestTypeGroup group : requestType.getGroups()) {
-                    RequestTypeGroupDTO groupDTO = groupMap.computeIfAbsent(
-                            group.getId(),
-                            id -> {
-                                RequestTypeGroupDTO dtoGroup = new RequestTypeGroupDTO(String.valueOf(id), group.getName());
-                                dtoGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
-                                group.getOrder().ifPresent(dtoGroup::setDisplayOrder);
-                                dtoGroup.setRequestTypeCount(0);
-                                return dtoGroup;
-                            }
-                    );
-
-                    groupDTO.setRequestTypeCount((groupDTO.getRequestTypeCount() == null ? 0 : groupDTO.getRequestTypeCount()) + 1);
-                    dto.getGroupIds().add(String.valueOf(group.getId()));
-                    dto.getGroups().add(groupDTO.getName());
-                    if (dto.getGroup() == null) {
-                        dto.setGroup(groupDTO.getName());
-                    }
-                }
-            }
-
-            dtoList.add(dto);
-        }
-
-        RequestTypesResponseDTO response = new RequestTypesResponseDTO(dtoList, new ArrayList<>(groupMap.values()));
-        response.setProjectKey(project.getKey());
-        response.setProjectName(project.getName());
-        response.setServiceDeskId(String.valueOf(serviceDesk.getId()));
-        response.setTotalCount(dtoList.size());
-        response.setHasGroups(!groupMap.isEmpty());
-        return response;
-    }
-
-    private RequestTypeDTO convertToDto(RequestType requestType, Project project, ServiceDesk serviceDesk) {
-        RequestTypeDTO dto = new RequestTypeDTO();
-        dto.setId(String.valueOf(requestType.getId()));
-        dto.setName(requestType.getName());
-        dto.setDescription(requestType.getDescription());
-        dto.setHelpText(requestType.getHelpText());
-        dto.setIssueTypeId(String.valueOf(requestType.getIssueTypeId()));
-        dto.setPortalId(String.valueOf(requestType.getPortalId()));
-        dto.setEnabled(true);
-        dto.setProjectKey(project != null ? project.getKey() : null);
-        dto.setServiceDeskId(serviceDesk != null ? String.valueOf(serviceDesk.getId()) : null);
-
-        // Extract display order - RequestType doesn't have getOrder(), so we'll use the position in the list
-        // The actual sorting will be handled by the frontend based on the order returned from the API
-        // For now, we'll leave displayOrder as null and let the frontend handle the default sorting
-        // TODO: Investigate JSM API for proper display order field
-
-        return dto;
-    }
-
-    private RequestTypesResponseDTO createEmptyResponse(String projectKey) {
-        RequestTypesResponseDTO response = new RequestTypesResponseDTO();
-        response.setProjectKey(projectKey);
-        response.setRequestTypes(Collections.emptyList());
-        response.setGroups(Collections.emptyList());
-        response.setTotalCount(0);
-        response.setHasGroups(false);
-        return response;
-    }
-
-    private RequestTypesResponseDTO buildSampleResponse(String projectKey, String projectName) {
-        List<RequestTypeDTO> requestTypes = getSampleRequestTypes(projectKey);
-        List<RequestTypeGroupDTO> groups = getSampleGroups();
-        RequestTypesResponseDTO response = new RequestTypesResponseDTO(requestTypes, groups);
-        response.setProjectKey(projectKey);
-        response.setProjectName(projectName);
-        response.setTotalCount(requestTypes.size());
-        return response;
-    }
-
-    /**
-     * Sample fallback data (used for development or when JSM APIs unavailable)
-     */
-    private List<RequestTypeDTO> getSampleRequestTypes(String projectKey) {
-        List<RequestTypeDTO> requestTypes = new ArrayList<>();
-
-        RequestTypeDTO help = new RequestTypeDTO("help", "Get Help", "Ask a question or get support");
-        help.setIcon("HelpCircle");
-        help.setColor("blue");
-        help.setProjectKey(projectKey);
-        help.setDisplayOrder(1);
-        assignGroup(help, "support", "Support");
-        requestTypes.add(help);
-
-        RequestTypeDTO incident = new RequestTypeDTO("incident", "Report an Incident", "Report a problem or issue");
-        incident.setIcon("Bug");
-        incident.setColor("red");
-        incident.setProjectKey(projectKey);
-        incident.setDisplayOrder(2);
-        assignGroup(incident, "support", "Support");
-        requestTypes.add(incident);
-
-        RequestTypeDTO question = new RequestTypeDTO("question", "Ask a Question", "General questions and inquiries");
-        question.setIcon("FileQuestion");
-        question.setColor("blue");
-        question.setProjectKey(projectKey);
-        question.setDisplayOrder(3);
-        assignGroup(question, "support", "Support");
-        requestTypes.add(question);
-
-        RequestTypeDTO serviceRequest = new RequestTypeDTO("service-request", "Service Request", "Request a service or item");
-        serviceRequest.setIcon("Mail");
-        serviceRequest.setColor("green");
-        serviceRequest.setProjectKey(projectKey);
-        serviceRequest.setDisplayOrder(4);
-        assignGroup(serviceRequest, "services", "Services");
-        requestTypes.add(serviceRequest);
-
-        RequestTypeDTO accessRequest = new RequestTypeDTO("access-request", "Access Request", "Request access to systems or resources");
-        accessRequest.setIcon("ShieldCheck");
-        accessRequest.setColor("blue");
-        accessRequest.setProjectKey(projectKey);
-        accessRequest.setDisplayOrder(5);
-        assignGroup(accessRequest, "services", "Services");
-        requestTypes.add(accessRequest);
-
-        RequestTypeDTO changeRequest = new RequestTypeDTO("change", "Request a Change", "Propose a change or improvement");
-        changeRequest.setIcon("Lightbulb");
-        changeRequest.setColor("yellow");
-        changeRequest.setProjectKey(projectKey);
-        changeRequest.setDisplayOrder(6);
-        assignGroup(changeRequest, "changes", "Changes");
-        requestTypes.add(changeRequest);
-
-        RequestTypeDTO featureRequest = new RequestTypeDTO("feature", "Feature Request", "Suggest a new feature");
-        featureRequest.setIcon("Zap");
-        featureRequest.setColor("purple");
-        featureRequest.setProjectKey(projectKey);
-        featureRequest.setDisplayOrder(7);
-        assignGroup(featureRequest, "changes", "Changes");
-        requestTypes.add(featureRequest);
-
-        return requestTypes;
-    }
-
-    private List<RequestTypeGroupDTO> getSampleGroups() {
-        List<RequestTypeGroupDTO> groups = new ArrayList<>();
-        RequestTypeGroupDTO support = new RequestTypeGroupDTO("support", "Support", "Support related request types");
-        support.setDisplayOrder(1);
-        support.setRequestTypeCount(3);
-        groups.add(support);
-
-        RequestTypeGroupDTO services = new RequestTypeGroupDTO("services", "Services", "Service request types");
-        services.setDisplayOrder(2);
-        services.setRequestTypeCount(2);
-        groups.add(services);
-
-        RequestTypeGroupDTO changes = new RequestTypeGroupDTO("changes", "Changes", "Change and improvement request types");
-        changes.setDisplayOrder(3);
-        changes.setRequestTypeCount(2);
-        groups.add(changes);
-
-        return groups;
-    }
-
-    private void assignGroup(RequestTypeDTO dto, String groupId, String groupName) {
-        dto.getGroupIds().add(groupId);
-        dto.getGroups().add(groupName);
-        if (dto.getGroup() == null) {
-            dto.setGroup(groupName);
-        }
-    }
-
-    /**
      * Search request types across all service desk projects
-     *
-     * @param searchTerm The search term
-     * @param maxResults Maximum number of results to return
-     * @return List of matching request types with project context
      */
     public List<GlobalRequestTypeSearchResult> searchAllRequestTypes(String searchTerm, int maxResults) {
         log.debug("Searching all request types for '{}'", searchTerm);
@@ -426,7 +196,6 @@ public class PortalRequestTypeService {
         }
 
         try {
-            // Get all projects and check which ones have service desks
             List<Project> allProjects = projectManager.getProjectObjects();
 
             for (Project project : allProjects) {
@@ -435,7 +204,6 @@ public class PortalRequestTypeService {
                 }
 
                 try {
-                    // Check if this project has a service desk
                     ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
                     if (serviceDesk == null) {
                         continue;
@@ -444,18 +212,14 @@ public class PortalRequestTypeService {
                     String projectKey = project.getKey();
                     String projectName = project.getName();
 
-                    // Get portal config to determine if portal is Live
                     boolean isLive = false;
                     if (portalConfigService != null) {
                         Optional<PortalConfigDTO> configOpt = portalConfigService.getPortalConfig(projectKey);
                         isLive = configOpt.map(PortalConfigDTO::isLive).orElse(false);
                     }
 
-                    // Get the JSM portal ID for OOTB navigation
                     String portalId = String.valueOf(serviceDesk.getId());
-
-                    // Load request types for this service desk
-                    List<RequestType> requestTypes = loadRequestTypes(serviceDesk);
+                    List<RequestType> requestTypes = loadAllRequestTypes(serviceDesk);
 
                     for (RequestType rt : requestTypes) {
                         if (results.size() >= maxResults) {
@@ -485,25 +249,167 @@ public class PortalRequestTypeService {
             log.error("Error performing global request type search", e);
         }
 
-        log.debug("Global search for '{}' returned {} results", searchTerm, results.size());
         return results;
+    }
+
+    private List<RequestType> loadAllRequestTypes(ServiceDesk serviceDesk) {
+        List<RequestType> requestTypes = new ArrayList<>();
+        ApplicationUser user = authenticationContext.getLoggedInUser();
+        int start = 0;
+        boolean hasMore = true;
+
+        while (hasMore) {
+            RequestTypeQuery query = jsdRequestTypeService.newQueryBuilder()
+                    .serviceDesk(serviceDesk.getId())
+                    .pagedRequest(SimplePagedRequest.paged(start, PAGE_SIZE))
+                    .requestOverrideSecurity(Boolean.TRUE)
+                    .filterHidden(Boolean.TRUE)
+                    .build();
+
+            PagedResponse<RequestType> response = jsdRequestTypeService.getRequestTypes(user, query);
+            requestTypes.addAll(response.getResults());
+
+            if (response.hasNextPage()) {
+                start += PAGE_SIZE;
+            } else {
+                hasMore = false;
+            }
+        }
+        return requestTypes;
+    }
+
+    private RequestTypesResponseDTO buildResponseAndSort(Project project, ServiceDesk serviceDesk, List<RequestType> allRequestTypes) {
+        // Map DTOs by ID so we can update their order later
+        Map<String, RequestTypeDTO> dtoMap = new HashMap<>();
+        List<RequestTypeDTO> dtoList = new ArrayList<>();
+        
+        // Map Groups by ID to ensure deduplication
+        Map<Integer, RequestTypeGroupDTO> groupMap = new LinkedHashMap<>();
+        
+        // Used to track discovery order of groups for the tab order
+        List<Integer> groupDiscoveryOrder = new ArrayList<>();
+
+        // 1. Convert everything to DTOs first
+        for (RequestType rt : allRequestTypes) {
+            RequestTypeDTO dto = convertToDto(rt, project, serviceDesk);
+            dtoList.add(dto);
+            dtoMap.put(String.valueOf(rt.getId()), dto);
+
+            if (rt.getGroups() != null) {
+                for (RequestTypeGroup group : rt.getGroups()) {
+                    int groupId = group.getId();
+
+                    // Create Group DTO if we haven't seen this ID before
+                    if (!groupMap.containsKey(groupId)) {
+                        groupDiscoveryOrder.add(groupId);
+                        RequestTypeGroupDTO newGroup = new RequestTypeGroupDTO(String.valueOf(groupId), group.getName());
+                        newGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
+                        
+                        // Default group display order is based on discovery order
+                        newGroup.setDisplayOrder(groupDiscoveryOrder.size());
+                        newGroup.setRequestTypeCount(0);
+                        groupMap.put(groupId, newGroup);
+                    }
+
+                    RequestTypeGroupDTO groupDTO = groupMap.get(groupId);
+                    groupDTO.setRequestTypeCount(groupDTO.getRequestTypeCount() + 1);
+
+                    // Link Group to RT
+                    dto.getGroupIds().add(String.valueOf(groupId));
+                    dto.getGroups().add(groupDTO.getName());
+                    
+                    if (dto.getGroup() == null) {
+                        dto.setGroup(groupDTO.getName());
+                    }
+                }
+            }
+        }
+
+        // 2. Query each group individually to get CORRECT Sort Order
+        ApplicationUser user = authenticationContext.getLoggedInUser();
+
+        for (Integer groupId : groupMap.keySet()) {
+            try {
+                // This query IS sorted by JSM based on drag-and-drop order
+                RequestTypeQuery sortedQuery = jsdRequestTypeService.newQueryBuilder()
+                        .serviceDesk(serviceDesk.getId())
+                        .group(groupId)
+                        .pagedRequest(SimplePagedRequest.paged(0, 100))
+                        .build();
+
+                List<RequestType> sortedTypes = jsdRequestTypeService.getRequestTypes(user, sortedQuery).getResults();
+
+                // Apply this specific order to our DTOs
+                for (int i = 0; i < sortedTypes.size(); i++) {
+                    String rtId = String.valueOf(sortedTypes.get(i).getId());
+                    RequestTypeDTO dto = dtoMap.get(rtId);
+
+                    if (dto != null) {
+                        // Store the index (0, 1, 2...) for this specific group
+                        dto.getGroupOrderMap().put(String.valueOf(groupId), i);
+                        
+                        // Also set main displayOrder if this is the first group (fallback)
+                        if (dto.getDisplayOrder() == null) {
+                            dto.setDisplayOrder(i);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Could not fetch sorted types for group {}", groupId, e);
+            }
+        }
+
+        // 3. Sort Groups themselves based on discovery order
+        List<RequestTypeGroupDTO> sortedGroups = new ArrayList<>(groupMap.values());
+        sortedGroups.sort(Comparator.comparingInt(g -> g.getDisplayOrder() != null ? g.getDisplayOrder() : 999));
+
+        RequestTypesResponseDTO response = new RequestTypesResponseDTO(dtoList, sortedGroups);
+        response.setProjectKey(project.getKey());
+        response.setProjectName(project.getName());
+        response.setServiceDeskId(String.valueOf(serviceDesk.getId()));
+        response.setTotalCount(dtoList.size());
+        response.setHasGroups(!groupMap.isEmpty());
+        return response;
+    }
+
+    private RequestTypeDTO convertToDto(RequestType requestType, Project project, ServiceDesk serviceDesk) {
+        RequestTypeDTO dto = new RequestTypeDTO();
+        dto.setId(String.valueOf(requestType.getId()));
+        dto.setName(requestType.getName());
+        dto.setDescription(requestType.getDescription());
+        dto.setHelpText(requestType.getHelpText());
+        dto.setIssueTypeId(String.valueOf(requestType.getIssueTypeId()));
+        dto.setPortalId(String.valueOf(requestType.getPortalId()));
+        dto.setEnabled(true);
+        dto.setProjectKey(project != null ? project.getKey() : null);
+        dto.setServiceDeskId(serviceDesk != null ? String.valueOf(serviceDesk.getId()) : null);
+        return dto;
+    }
+
+    private RequestTypesResponseDTO createEmptyResponse(String projectKey) {
+        RequestTypesResponseDTO response = new RequestTypesResponseDTO();
+        response.setProjectKey(projectKey);
+        response.setRequestTypes(Collections.emptyList());
+        response.setGroups(Collections.emptyList());
+        response.setTotalCount(0);
+        response.setHasGroups(false);
+        return response;
     }
 
     /**
      * DTO for global request type search results.
-     * Uses Jackson 1.x annotations for Jira compatibility.
      */
     @org.codehaus.jackson.annotate.JsonAutoDetect(
-        fieldVisibility = org.codehaus.jackson.annotate.JsonAutoDetect.Visibility.NONE,
-        getterVisibility = org.codehaus.jackson.annotate.JsonAutoDetect.Visibility.PUBLIC_ONLY
+            fieldVisibility = org.codehaus.jackson.annotate.JsonAutoDetect.Visibility.NONE,
+            getterVisibility = org.codehaus.jackson.annotate.JsonAutoDetect.Visibility.PUBLIC_ONLY
     )
     public static class GlobalRequestTypeSearchResult {
         private RequestTypeDTO requestType;
         private String projectKey;
         private String projectName;
         private String serviceDeskId;
-        private String portalId;  // JSM portal ID for OOTB navigation
-        private boolean isLive;   // Whether this portal uses RAIL custom portal
+        private String portalId;
+        private boolean isLive;
 
         @org.codehaus.jackson.annotate.JsonProperty("requestType")
         public RequestTypeDTO getRequestType() { return requestType; }
