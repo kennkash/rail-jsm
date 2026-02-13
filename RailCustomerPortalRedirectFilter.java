@@ -10,6 +10,10 @@ import com.samsungbuilder.jsm.dto.PortalConfigDTO;
 import com.samsungbuilder.jsm.service.PortalConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 
 import javax.inject.Inject;
 import javax.servlet.Filter;
@@ -48,43 +52,50 @@ public class RailCustomerPortalRedirectFilter implements Filter {
     private static final Logger log = LoggerFactory.getLogger(RailCustomerPortalRedirectFilter.class);
     private static final String ALREADY_FILTERED = RailCustomerPortalRedirectFilter.class.getName() + "_already_filtered";
 
-    // Target URL for RAIL Portal
-    private static final String RAIL_PORTAL_PATH = "/plugins/servlet/customer-rail/";
-    
-    // Target URL for RAIL "home" (no project key) - ALWAYS redirect for certain legacy home URLs
-    private static final String RAIL_HOME_PATH = "/plugins/servlet/customer-rail";
+    // Target URL for RAIL Portal (project-specific)
+private static final String RAIL_PORTAL_PATH = "/plugins/servlet/customer-rail/";
 
-    private boolean isRailHomeRedirectPath(String path) {
-        if (path == null) return false;
+// Target URL for RAIL "home" (no project key) - ALWAYS redirect for certain legacy home URLs
+private static final String RAIL_HOME_PATH = "/plugins/servlet/customer-rail";
 
-        // JSM "portals list" homepage
-        if (path.equals("/servicedesk/customer/portals") || path.startsWith("/servicedesk/customer/portals/")) {
-            return true;
-        }
+/**
+ * Exact legacy homepage routes that should ALWAYS redirect to RAIL_HOME_PATH
+ * (no isLive check, no skipRail override).
+ *
+ * IMPORTANT: values should be normalized (no trailing slash).
+ */
+private static final Set<String> ALWAYS_REDIRECT_HOME_PATHS = Collections.unmodifiableSet(new HashSet<String>() {{
+    add("/servicedesk/customer/portals");
+    add("/plugins/servlet/desk");
+    add("/plugins/servlet/desk/site/global");
 
-        // Refined / Desk "global" homepage (handle both 'global' and the user's 'gloval' typo defensively)
-        if (path.equals("/plugins/servlet/desk/site/global")
-                || path.startsWith("/plugins/servlet/desk/site/global/")
-                || path.equals("/plugins/servlet/desk/site/gloval")
-                || path.startsWith("/plugins/servlet/desk/site/gloval/")) {
-            return true;
-        }
+    // Optional - only include if it's real in your environment:
+    // add("/plugins/servlet/desk/site/gloval");
+}});
 
-        // Desk root homepage
-        if (path.equals("/plugins/servlet/desk") || path.equals("/plugins/servlet/desk/")) {
-            return true;
-        }
+private String normalizePath(String path) {
+    if (path == null || path.isEmpty()) return path;
+    if ("/".equals(path)) return path;
 
-        return false;
+    // Remove ONE trailing slash for consistency
+    if (path.endsWith("/")) {
+        return path.substring(0, path.length() - 1);
     }
+    return path;
+}
 
-    private String withQueryString(HttpServletRequest request, String target) {
-        String qs = request.getQueryString();
-        if (qs != null && !qs.isEmpty()) {
-            return target + "?" + qs;
-        }
-        return target;
+private String appendQueryString(HttpServletRequest request, String target) {
+    String qs = request.getQueryString();
+    if (qs != null && !qs.isEmpty()) {
+        return target + "?" + qs;
     }
+    return target;
+}
+
+private boolean isAlwaysRedirectHomePath(String path) {
+    String normalized = normalizePath(path);
+    return normalized != null && ALWAYS_REDIRECT_HOME_PATHS.contains(normalized);
+}
 
 
     // Pattern 1: Default Jira Service Management URL
@@ -232,33 +243,37 @@ public class RailCustomerPortalRedirectFilter implements Filter {
      * Attempt to redirect to RAIL Portal if conditions are met.
      */
     private boolean handleRedirect(HttpServletRequest request, HttpServletResponse response, String path)
-            throws IOException {
+        throws IOException {
 
-        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+    String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+    String normalizedPath = normalizePath(path);
 
-        // NEW: Always redirect "homepage" legacy URLs to RAIL home (regardless of isLive or skipRail)
-        if (isRailHomeRedirectPath(path)) {
-            String target = withQueryString(request, contextPath + RAIL_HOME_PATH);
+    // 0) ALWAYS redirect legacy "homepage" URLs (regardless of isLive or skipRail)
+    if (isAlwaysRedirectHomePath(normalizedPath)) {
+        String target = appendQueryString(request, contextPath + RAIL_HOME_PATH);
 
-            System.out.println(">>> RAIL Filter - HOME REDIRECT: " + request.getRequestURI() + " -> " + target);
-            log.info("RAIL Filter - HOME REDIRECT: {} -> {}", request.getRequestURI(), target);
+        System.out.println(">>> RAIL Filter - HOME REDIRECT: " + request.getRequestURI() + " -> " + target);
+        log.info("RAIL Filter - HOME REDIRECT: {} -> {}", request.getRequestURI(), target);
 
-            response.sendRedirect(target);
-            return true;
-        }
+        response.sendRedirect(target);
+        return true;
+    }
 
-        // Don't redirect if already going to RAIL Portal
-        if (path.contains("/customer-rail")) {
-            System.out.println(">>> RAIL Filter - Already targeting customer-rail, skipping");
-            return false;
-        }
+    // Don't redirect if already going to RAIL Portal
+    if (normalizedPath != null && normalizedPath.contains("/customer-rail")) {
+        System.out.println(">>> RAIL Filter - Already targeting customer-rail, skipping");
+        return false;
+    }
 
-        // Don't redirect if skipRail parameter is present (used when portal is NOT Live)
-        String skipRail = request.getParameter("skipRail");
-        if ("true".equals(skipRail)) {
-            System.out.println(">>> RAIL Filter - skipRail=true, allowing OOTB portal");
-            return false;
-        }
+    // Don't redirect if skipRail parameter is present (used when portal is NOT Live)
+    // NOTE: This does NOT apply to ALWAYS redirect homepages (handled above).
+    String skipRail = request.getParameter("skipRail");
+    if ("true".equals(skipRail)) {
+        System.out.println(">>> RAIL Filter - skipRail=true, allowing OOTB portal");
+        return false;
+    }
+
+    // ... keep the rest of your existing logic the same ...
 
         // FIRST: Check if this is a request type URL (e.g., /portal/5/create/123)
         // These need special handling to redirect to RAIL request type page
