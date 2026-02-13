@@ -273,51 +273,50 @@ private boolean isAlwaysRedirectHomePath(String path) {
         return false;
     }
 
-    // ... keep the rest of your existing logic the same ...
 
-        // FIRST: Check if this is a request type URL (e.g., /portal/5/create/123)
-        // These need special handling to redirect to RAIL request type page
-                String[] requestTypeInfo = extractRequestTypeInfo(path);
-        if (requestTypeInfo != null) {
-            Integer portalId = parsePortalId(requestTypeInfo[0]);
-            String requestTypeId = requestTypeInfo[1];
+    // FIRST: Check if this is a request type URL (e.g., /portal/5/create/123)
+    // These need special handling to redirect to RAIL request type page
+    String[] requestTypeInfo = extractRequestTypeInfo(path);
+    if (requestTypeInfo != null) {
+        Integer portalId = parsePortalId(requestTypeInfo[0]);
+        String requestTypeId = requestTypeInfo[1];
 
-            if (portalId != null && requestTypeId != null) {
-                System.out.println(">>> RAIL Filter - Request type URL detected: portalId=" + portalId + ", requestTypeId=" + requestTypeId);
+        if (portalId != null && requestTypeId != null) {
+            System.out.println(">>> RAIL Filter - Request type URL detected: portalId=" + portalId + ", requestTypeId=" + requestTypeId);
 
-                String projectKey = getProjectKeyFromPortalId(portalId);
-                if (projectKey != null) {
-                    Optional<PortalConfigDTO> config = getPortalConfig(projectKey);
-                    boolean isLive = config.isPresent() && config.get().isLive();
+            String projectKey = getProjectKeyFromPortalId(portalId);
+            if (projectKey != null) {
+                Optional<PortalConfigDTO> config = getPortalConfig(projectKey);
+                boolean isLive = config.isPresent() && config.get().isLive();
 
-                    if (isLive) {
-                        // Redirect to RAIL request type page
-                        String target = contextPath + RAIL_PORTAL_PATH + projectKey + "/requesttype/" + requestTypeId;
-                        target = withQueryString(request, target);
+                if (isLive) {
+                    // Redirect to RAIL request type page
+                    String target = contextPath + RAIL_PORTAL_PATH + projectKey + "/requesttype/" + requestTypeId;
+                    target = withQueryString(request, target);
 
-                        System.out.println(">>> RAIL Filter - REDIRECTING REQUEST TYPE (RAIL): " + request.getRequestURI() + " -> " + target);
-                        log.info("RAIL Filter - REDIRECTING REQUEST TYPE (RAIL): {} -> {}", request.getRequestURI(), target);
-                        response.sendRedirect(target);
-                        return true;
-                    }
+                    System.out.println(">>> RAIL Filter - REDIRECTING REQUEST TYPE (RAIL): " + request.getRequestURI() + " -> " + target);
+                    log.info("RAIL Filter - REDIRECTING REQUEST TYPE (RAIL): {} -> {}", request.getRequestURI(), target);
+                    response.sendRedirect(target);
+                    return true;
+                }
 
-                    // NEW: If NOT live and this was a Desk/Refined URL, redirect to OOTB create URL
-                    if (path.startsWith("/plugins/servlet/desk/portal/")) {
-                        String target = contextPath + OOTB_JSM_PORTAL_PATH + portalId + "/create/" + requestTypeId;
-                        target = withQueryString(request, target);
+                // NEW: If NOT live and this was a Desk/Refined URL, redirect to OOTB create URL
+                if (path.startsWith("/plugins/servlet/desk/portal/")) {
+                    String target = contextPath + OOTB_JSM_PORTAL_PATH + portalId + "/create/" + requestTypeId;
+                    target = withQueryString(request, target);
 
-                        System.out.println(">>> RAIL Filter - REDIRECTING REQUEST TYPE (OOTB fallback): " + request.getRequestURI() + " -> " + target);
-                        log.info("RAIL Filter - REDIRECTING REQUEST TYPE (OOTB fallback): {} -> {}", request.getRequestURI(), target);
-                        response.sendRedirect(target);
-                        return true;
-                    }
+                    System.out.println(">>> RAIL Filter - REDIRECTING REQUEST TYPE (OOTB fallback): " + request.getRequestURI() + " -> " + target);
+                    log.info("RAIL Filter - REDIRECTING REQUEST TYPE (OOTB fallback): {} -> {}", request.getRequestURI(), target);
+                    response.sendRedirect(target);
+                    return true;
                 }
             }
-
-            // If we can't redirect, let it pass through (may 404 if Refined is disabled)
-            System.out.println(">>> RAIL Filter - Request type URL but cannot resolve portal/project, passing through");
-            return false;
         }
+
+        // If we can't redirect, let it pass through (may 404 if Refined is disabled)
+        System.out.println(">>> RAIL Filter - Request type URL but cannot resolve portal/project, passing through");
+        return false;
+    }
 
         // SECOND: Check if this is a portal sub-path (issue view, user pages, etc.)
         // We don't have pages to handle these, so pass through to OOTB
@@ -359,7 +358,7 @@ private boolean isAlwaysRedirectHomePath(String path) {
         log.info("RAIL Filter - Mapped portal ID {} to project key: {}", portalId, projectKey);
 
         // Check if RAIL portal is Live for this project
-              Optional<PortalConfigDTO> config = getPortalConfig(projectKey);
+        Optional<PortalConfigDTO> config = getPortalConfig(projectKey);
         boolean isLive = config.isPresent() && config.get().isLive();
 
         System.out.println(">>> RAIL Filter - Project " + projectKey + " isLive=" + isLive);
