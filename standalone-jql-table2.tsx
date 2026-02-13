@@ -1,5 +1,3 @@
-Based on the file you provided, I have everything I need to make the change. I am assuming you have already updated the Issue type definition (in @/lib/api/issues-client) and the backend to include serviceDeskId, as discussed in the previous turn.
-Here is the updated StandaloneJQLTable component. The key changes are in the buildIssueUrl function and the two places where it is called (the "Key" column and the "External Link" icon).
 /**
  * StandaloneJQLTable Component
  *
@@ -251,7 +249,7 @@ export function StandaloneJQLTable({
     if (!issue.key) return null;
 
     // Using 'as any' here to access serviceDeskId if the Issue type hasn't been strictly updated yet
-    const serviceDeskId = (issue as any).serviceDeskId;
+    const serviceDeskId = issue.serviceDeskId
 
     if (serviceDeskId) {
       return `/servicedesk/customer/portal/${serviceDeskId}/${issue.key}`;
@@ -960,4 +958,3 @@ export function StandaloneJQLTable({
     </div>
   );
 }
-
