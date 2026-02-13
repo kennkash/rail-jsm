@@ -21,6 +21,7 @@ import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.atlassian.query.Query;
 import com.atlassian.servicedesk.api.ServiceDesk;
 import com.atlassian.servicedesk.api.ServiceDeskManager;
+import com.atlassian.jira.component.ComponentAccessor;
 import com.atlassian.servicedesk.api.request.CustomerRequest;
 import com.atlassian.servicedesk.api.request.CustomerRequestQuery;
 import com.atlassian.servicedesk.api.request.ServiceDeskCustomerRequestService;
@@ -561,14 +562,22 @@ public class IssueService {
             dto.setProjectName(project.getName());
 
             // --- ADDED: Resolve Service Desk ID for Portal Linking ---
+            String serviceDeskId = null;
             try {
-                ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
-                if (serviceDesk != null) {
-                    dto.setServiceDeskId(String.valueOf(serviceDesk.getId()));
+                com.atlassian.servicedesk.api.ServiceDeskManager sdManager =
+                    ComponentAccessor.getOSGiComponentInstanceOfType(
+                        com.atlassian.servicedesk.api.ServiceDeskManager.class
+                    );
+                if (sdManager != null) {
+                    com.atlassian.servicedesk.api.ServiceDesk serviceDesk =
+                        sdManager.getServiceDeskForProject(project);
+                    if (serviceDesk != null) {
+                        serviceDeskId = String.valueOf(serviceDesk.getId());
+                        dto.setServiceDeskId(serviceDeskId);
+                    }
                 }
             } catch (Exception e) {
-                // Log debug only to avoid noise
-                log.debug("Could not resolve Service Desk ID for issue {}: {}", issue.getKey(), e.getMessage());
+                log.warn("Could not resolve Service Desk ID for issue {}: {}", issue.getKey(), e.getMessage());
             }
             // ---------------------------------------------------------
         }
