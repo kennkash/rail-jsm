@@ -88,14 +88,28 @@
                     location="before-dispatch"
                     weight="-100">
         <description>Redirects legacy portal URLs to RAIL Portal when Live</description>
+
+        <!-- existing -->
         <url-pattern>/plugins/servlet/desk/portal/*</url-pattern>
         <url-pattern>/servicedesk/*</url-pattern>
         <url-pattern>/projects/*/servicedesk*</url-pattern>
         <url-pattern>/browse/*/servicedesk*</url-pattern>
+
+        <!-- NEW: legacy "home/landing" URLs -> always redirect to /plugins/servlet/customer-rail -->
+        <!-- /servicedesk/customer/portals and /servicedesk/customer/portals/... -->
+        <url-pattern>/servicedesk/customer/portals</url-pattern>
+        <url-pattern>/servicedesk/customer/portals/*</url-pattern>
+
+        <!-- /plugins/servlet/desk and /plugins/servlet/desk/... -->
+        <url-pattern>/plugins/servlet/desk</url-pattern>
+        <url-pattern>/plugins/servlet/desk/*</url-pattern>
+
+        <!-- /plugins/servlet/desk/site/global (and other desk/site/* variants) -->
+        <url-pattern>/plugins/servlet/desk/site/*</url-pattern>
+
         <dispatcher>REQUEST</dispatcher>
         <dispatcher>FORWARD</dispatcher>
     </servlet-filter>
-
     <!--
         JSM CUSTOMER CONTEXT REGISTRATION
 
