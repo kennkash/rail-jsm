@@ -56,6 +56,29 @@
     }
 
     /**
+     * Check if a URL path is a JSM "portals home" that should trigger RAIL home redirect
+     * (forces full page request so server-side filter can redirect)
+     */
+    function isPortalsHomeUrl(pathname) {
+        if (!pathname) return false;
+
+        // Strip query string if present
+        var queryIndex = pathname.indexOf('?');
+        if (queryIndex > -1) {
+            pathname = pathname.substring(0, queryIndex);
+        }
+
+        // Strip hash if present
+        var hashIndex = pathname.indexOf('#');
+        if (hashIndex > -1) {
+            pathname = pathname.substring(0, hashIndex);
+        }
+
+        // Match exactly /servicedesk/customer/portals or /servicedesk/customer/portals/
+        return /\/servicedesk\/customer\/portals\/?$/.test(pathname);
+    }
+
+    /**
      * Extract pathname from href (handles relative and absolute URLs)
      * Strips query parameters and hash for pattern matching
      */
@@ -123,18 +146,19 @@
 
         var pathname = extractPathname(href);
 
-        // Skip if navigating to the SAME portal root we're already on
+        // Skip if navigating to the SAME URL we're already on
         if (pathname === currentPathname) {
             return;
         }
 
-        if (isPortalRootUrl(pathname)) {
-            console.log('>>> RAIL Interceptor: Click intercepted for portal root:', pathname);
+        if (isPortalRootUrl(pathname) || isPortalsHomeUrl(pathname)) {
+            console.log('>>> RAIL Interceptor: Click intercepted for portal root/home:', pathname);
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
 
             // Force full page navigation
+            currentPathname = pathname; // keep local state consistent
             window.location.href = href;
             return false;
         }
@@ -163,10 +187,11 @@
                     return original.apply(history, arguments);
                 }
 
-                // Only intercept if navigating to a portal ROOT (not sub-pages)
-                if (isPortalRootUrl(pathname)) {
-                    console.log('>>> RAIL Interceptor: History API intercepted for portal root:', pathname);
+                // Only intercept if navigating to a portal ROOT or portals HOME
+                if (isPortalRootUrl(pathname) || isPortalsHomeUrl(pathname)) {
+                    console.log('>>> RAIL Interceptor: History API intercepted for portal root/home:', pathname);
                     // Force full page navigation instead of SPA navigation
+                    currentPathname = pathname; // keep local state consistent
                     window.location.href = url;
                     return;
                 }
@@ -187,8 +212,8 @@
         window.addEventListener('popstate', function() {
             var newPathname = window.location.pathname;
             // Only reload if we navigated to a DIFFERENT portal root
-            if (newPathname !== currentPathname && isPortalRootUrl(newPathname)) {
-                console.log('>>> RAIL Interceptor: Popstate to different portal root, reloading');
+            if (newPathname !== currentPathname && (isPortalRootUrl(newPathname) || isPortalsHomeUrl(newPathname))) {
+                console.log('>>> RAIL Interceptor: Popstate to different portal root/home, reloading');
                 window.location.reload();
             }
         });
