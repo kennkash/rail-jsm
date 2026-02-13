@@ -1,0 +1,175 @@
+<!-- rail-at-sas/backend/src/main/resources/atlassian-plugin.xml -->
+<?xml version="1.0" encoding="UTF-8"?>
+
+<atlassian-plugin key="${atlassian.plugin.key}" name="${project.name}" plugins-version="2">
+    <plugin-info>
+        <description>${project.description}</description>
+        <version>${project.version}</version>
+        <vendor name="${project.organization.name}" url="${project.organization.url}" />
+    </plugin-info>
+
+    <resource type="i18n" name="i18n" location="rail-portal-plugin"/>
+
+    <web-resource key="rail-portal-resources" name="RAIL Portal Web Resources">
+        <dependency>com.atlassian.auiplugin:ajs</dependency>
+        <resource type="download" name="rail-portal.css" location="frontend/rail-portal.css"/>
+        <resource type="download" name="rail-portal.js" location="frontend/rail-portal.js"/>
+        <resource type="download" name="images/" location="frontend/images/"/>
+        <resource type="download" name="SAS_Black_Logo.png" location="frontend/SAS_Black_Logo.png"/>
+        <context>rail-portal</context>
+    </web-resource>
+
+    <!--
+        RAIL Portal Link Interceptor - Runs on OOTB JSM Customer Portal pages
+        Intercepts navigation to portal root URLs and forces full page reload
+        so the server-side filter can redirect to RAIL Portal when Live.
+
+        Multiple contexts used to ensure loading on both native JSM and Refined portals:
+        - atl.general: All Jira pages (fallback for plugin servlets)
+        - customerportal: Native JSM customer portal
+        - sd.portal.page: Service Desk portal pages
+        - sd.general: General Service Desk context
+        - servicedesk.portal: Service Desk portal context
+        - jira.general: General Jira context
+    -->
+    <web-resource key="rail-portal-intercept" name="RAIL Portal Link Interceptor">
+        <dependency>com.atlassian.auiplugin:ajs</dependency>
+        <resource type="download" name="rail-portal-intercept.js" location="frontend/rail-portal-intercept.js"/>
+        <!-- Load on all possible JSM/portal pages -->
+        <context>atl.general</context>
+        <context>customerportal</context>
+        <context>sd.portal.page</context>
+        <context>sd.general</context>
+        <context>servicedesk.portal</context>
+        <context>jira.general</context>
+    </web-resource>
+
+    <!-- RAIL Portal Settings CSS - Gradient styling for project settings web-item -->
+    <web-resource key="rail-portal-settings-css" name="RAIL Portal Settings CSS">
+        <resource type="download" name="rail-portal-settings.css" location="frontend/rail-portal-settings.css"/>
+        <!-- Load on project settings pages -->
+        <context>atl.admin</context>
+        <context>jira.admin</context>
+        <context>atl.general</context>
+    </web-resource>
+
+    <rest key="rail-portal-rest" path="/rail" version="1.0">
+        <description>RAIL Portal REST services</description>
+        <packages>com.samsungbuilder.jsm.rest</packages>
+    </rest>
+
+    <!-- SERVLET FILTER FOR PORTAL REDIRECTS -->
+    <!--
+        This filter intercepts legacy JSM portal URLs and redirects to RAIL Portal when Live.
+        Weight is set to -100 to ensure our filter runs BEFORE other competing plugins
+        (Refined, old custom plugin). Lower weight = higher priority.
+
+        IMPORTANT: Location is "before-dispatch" because:
+        1. OSGi services (ServiceDeskManager, ProjectManager) are fully available at this location
+        2. The filter can successfully lookup portal ID -> project key mappings
+        3. Unlicensed users CAN reach /plugins/servlet/desk/portal/* URLs (Refined allows unauthenticated access)
+        4. Our filter intercepts AFTER authentication but BEFORE the final servlet dispatch
+
+        Earlier locations (after-encoding, before-login) fail because OSGi services are not yet initialized.
+
+        Intercepts:
+        - /servicedesk/customer/portal/{portalID} (Default JSM URL)
+        - /servicedesk/* (Other service desk URLs)
+        - /plugins/servlet/desk/portal/{portalID}/ (Refined Plugin URL)
+        - /plugins/servlet/desk/portal/{portalID}/rail/ (Old Custom Plugin URL)
+        - /projects/*/servicedesk* (Project service desk URLs)
+        - /browse/*/servicedesk* (Browse service desk URLs)
+
+        Redirects to: /plugins/servlet/customer-rail/{projectKey} when portal isLive=true
+    -->
+    <servlet-filter key="rail-portal-redirect-filter"
+                    name="RAIL Portal Redirect Filter"
+                    class="com.samsungbuilder.jsm.filter.RailCustomerPortalRedirectFilter"
+                    location="before-dispatch"
+                    weight="-100">
+        <description>Redirects legacy portal URLs to RAIL Portal when Live</description>
+        <url-pattern>/plugins/servlet/desk/portal/*</url-pattern>
+        <url-pattern>/servicedesk/*</url-pattern>
+        <url-pattern>/projects/*/servicedesk*</url-pattern>
+        <url-pattern>/browse/*/servicedesk*</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+        <dispatcher>FORWARD</dispatcher>
+    </servlet-filter>
+
+    <!--
+        JSM CUSTOMER CONTEXT REGISTRATION
+
+        The <customercontext> module is a JSM-specific plugin module that tells Atlassian
+        to treat the specified paths as CUSTOMER-FACING (not agent-facing).
+
+        This is CRITICAL for allowing unlicensed JSM customers to:
+        1. Access the RAIL Portal servlet without being redirected to login
+        2. Call REST APIs to fetch portal data, submit tickets, etc.
+
+        Customer-facing paths have different security rules:
+        - They allow unlicensed users to access them
+        - They bypass standard Jira authentication/license checks
+        - The REST APIs under these paths get special handling
+
+        This is the same mechanism Refined uses to allow anonymous/unlicensed access.
+    -->
+    <customercontext key="railCustomerContext"
+                     name="RAIL Portal Customer Context"
+                     path="/plugins/servlet/customer-rail">
+        <uri regex=".*"/>
+    </customercontext>
+
+    <customercontext key="railRestContext"
+                     name="RAIL Portal REST Customer Context"
+                     path="/rest/rail/1.0">
+        <uri regex=".*"/>
+    </customercontext>
+
+    <!-- PRODUCTION SERVLETS -->
+
+    <!-- Builder servlet - Admin interface for portal configuration -->
+    <servlet key="rail-builder-servlet" class="com.samsungbuilder.jsm.servlet.RailPortalServlet">
+        <description>RAIL Portal Builder - Admin interface for portal configuration</description>
+        <url-pattern>/rail/builder/*</url-pattern>
+    </servlet>
+
+    <!-- Customer portal servlet - Customer-facing portal interface (with path) -->
+    <servlet key="customer-rail-servlet" class="com.samsungbuilder.jsm.servlet.CustomerRailServlet">
+        <description>Customer Rail Portal - Customer-facing portal interface</description>
+        <url-pattern>/customer-rail/*</url-pattern>
+    </servlet>
+
+    <!-- Customer portal servlet - exact match for root URL without trailing slash -->
+    <servlet key="customer-rail-root-servlet" class="com.samsungbuilder.jsm.servlet.CustomerRailServlet">
+        <description>Customer Rail Portal - Root URL without trailing slash</description>
+        <url-pattern>/customer-rail</url-pattern>
+    </servlet>
+
+    <!-- Admin configuration servlet - exact match for root URL without trailing slash -->
+    <servlet key="rail-admin-servlet" class="com.samsungbuilder.jsm.servlet.RailAdminServlet">
+        <description>RAIL Admin Configuration - Root URL without trailing slash</description>
+        <url-pattern>/rail/admin</url-pattern>
+    </servlet>
+
+    <!-- Web item for RAIL Admin in Jira Administration menu -->
+    <web-item key="rail-admin-web-item" name="RAIL Portal Configuration" section="system.admin/globalsettings" weight="200">
+        <label>RAIL Portal Configuration</label>
+        <description>Configure global settings for RAIL Portal</description>
+        <link linkId="rail-admin-link">/plugins/servlet/rail/admin</link>
+    </web-item>
+
+    <!-- Custom web section for RAIL Portal in project configuration -->
+    <web-section key="rail-portal-project-config-section" name="RAIL Portal Settings Section" location="atl.jira.proj.config" weight="1">
+        <label key="rail-portal.project.config.section.label"/>
+        <description key="rail-portal.project.config.section.description"/>
+    </web-section>
+
+    <!-- Web item for Portal Settings in the custom section -->
+    <web-item key="portal-settings-web-item" name="Portal Settings" section="atl.jira.proj.config/rail-portal-project-config-section" weight="10">
+        <label key="rail-portal.project.config.item.label"/>
+        <description key="rail-portal.project.config.item.description"/>
+        <link linkId="portal-settings-link">/plugins/servlet/rail/builder/${project.key}</link>
+        <context-provider class="com.samsungbuilder.jsm.context.PortalProjectContextProvider" />
+        <styleClass>rail-portal-config-link</styleClass>
+    </web-item>
+</atlassian-plugin>
