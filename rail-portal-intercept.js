@@ -1,3 +1,5 @@
+<a href="https://jirastg.samsungaustin.com/servicedesk/customer/portals" class="cv-breadcrumb-item-link js-breadcrumb-item-link ">SAS Help Main Page</a>
+
 /* rail-at-sas/backend/src/main/resources/frontend/rail-portal-intercept.js  */
 /**
  * RAIL Portal Link Interceptor
