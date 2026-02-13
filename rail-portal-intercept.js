@@ -1,5 +1,3 @@
-<a href="https://jirastg.samsungaustin.com/servicedesk/customer/portals" class="cv-breadcrumb-item-link js-breadcrumb-item-link ">SAS Help Main Page</a>
-
 /* rail-at-sas/backend/src/main/resources/frontend/rail-portal-intercept.js  */
 /**
  * RAIL Portal Link Interceptor
@@ -22,6 +20,11 @@
     window.__RAIL_INTERCEPTOR_LOADED__ = true;
 
     console.log('>>> RAIL Portal Interceptor: Initializing...');
+
+    function normalizePath(path) {
+        if (!path) return path;
+        return (path.length > 1 && path.endsWith('/')) ? path.slice(0, -1) : path;
+    }
 
     /**
      * Check if a URL path is a portal root that should trigger RAIL redirect
@@ -124,18 +127,8 @@
      * Handle link clicks and force full page navigation for portal roots
      */
     function handleLinkClick(event) {
-        // Find the closest anchor element
-        var target = event.target;
-        var anchor = null;
-
-        while (target && target !== document) {
-            if (target.tagName === 'A') {
-                anchor = target;
-                break;
-            }
-            target = target.parentElement;
-        }
-
+        // More reliable than manual parent walking (supports nested spans/icons)
+        var anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
         if (!anchor) return;
 
         var href = anchor.getAttribute('href');
@@ -148,8 +141,8 @@
 
         var pathname = extractPathname(href);
 
-        // Skip if navigating to the SAME URL we're already on
-        if (pathname === currentPathname) {
+        // Skip if navigating to the SAME URL we're already on (normalize trailing slashes)
+        if (normalizePath(pathname) === normalizePath(currentPathname)) {
             return;
         }
 
@@ -184,8 +177,8 @@
             if (url) {
                 var pathname = extractPathname(url.toString());
 
-                // Skip if navigating to the SAME URL we're already on
-                if (pathname === currentPathname) {
+                // Skip if navigating to the SAME URL we're already on (normalize trailing slashes)
+                if (normalizePath(pathname) === normalizePath(currentPathname)) {
                     return original.apply(history, arguments);
                 }
 
@@ -213,8 +206,9 @@
     if (!isCurrentlyOnPortalRoot) {
         window.addEventListener('popstate', function() {
             var newPathname = window.location.pathname;
-            // Only reload if we navigated to a DIFFERENT portal root
-            if (newPathname !== currentPathname && (isPortalRootUrl(newPathname) || isPortalsHomeUrl(newPathname))) {
+            // Only reload if we navigated to a DIFFERENT portal root/home
+            if (normalizePath(newPathname) !== normalizePath(currentPathname) &&
+                (isPortalRootUrl(newPathname) || isPortalsHomeUrl(newPathname))) {
                 console.log('>>> RAIL Interceptor: Popstate to different portal root/home, reloading');
                 window.location.reload();
             }
