@@ -51,8 +51,7 @@ public class RailCustomerPortalRedirectFilter implements Filter {
     // Target URL for RAIL Portal
     private static final String RAIL_PORTAL_PATH = "/plugins/servlet/customer-rail/";
     
-
-        // Target URL for RAIL "home" (no project key) - ALWAYS redirect for certain legacy home URLs
+    // Target URL for RAIL "home" (no project key) - ALWAYS redirect for certain legacy home URLs
     private static final String RAIL_HOME_PATH = "/plugins/servlet/customer-rail";
 
     private boolean isRailHomeRedirectPath(String path) {
@@ -237,11 +236,6 @@ public class RailCustomerPortalRedirectFilter implements Filter {
 
         String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
 
-            private boolean handleRedirect(HttpServletRequest request, HttpServletResponse response, String path)
-            throws IOException {
-
-        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
-
         // NEW: Always redirect "homepage" legacy URLs to RAIL home (regardless of isLive or skipRail)
         if (isRailHomeRedirectPath(path)) {
             String target = withQueryString(request, contextPath + RAIL_HOME_PATH);
@@ -251,19 +245,6 @@ public class RailCustomerPortalRedirectFilter implements Filter {
 
             response.sendRedirect(target);
             return true;
-        }
-
-        // Don't redirect if already going to RAIL Portal
-        if (path.contains("/customer-rail")) {
-            System.out.println(">>> RAIL Filter - Already targeting customer-rail, skipping");
-            return false;
-        }
-
-        // Don't redirect if skipRail parameter is present (used when portal is NOT Live)
-        String skipRail = request.getParameter("skipRail");
-        if ("true".equals(skipRail)) {
-            System.out.println(">>> RAIL Filter - skipRail=true, allowing OOTB portal");
-            return false;
         }
 
         // Don't redirect if already going to RAIL Portal
