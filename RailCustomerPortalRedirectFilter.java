@@ -50,6 +50,43 @@ public class RailCustomerPortalRedirectFilter implements Filter {
 
     // Target URL for RAIL Portal
     private static final String RAIL_PORTAL_PATH = "/plugins/servlet/customer-rail/";
+    
+
+        // Target URL for RAIL "home" (no project key) - ALWAYS redirect for certain legacy home URLs
+    private static final String RAIL_HOME_PATH = "/plugins/servlet/customer-rail";
+
+    private boolean isRailHomeRedirectPath(String path) {
+        if (path == null) return false;
+
+        // JSM "portals list" homepage
+        if (path.equals("/servicedesk/customer/portals") || path.startsWith("/servicedesk/customer/portals/")) {
+            return true;
+        }
+
+        // Refined / Desk "global" homepage (handle both 'global' and the user's 'gloval' typo defensively)
+        if (path.equals("/plugins/servlet/desk/site/global")
+                || path.startsWith("/plugins/servlet/desk/site/global/")
+                || path.equals("/plugins/servlet/desk/site/gloval")
+                || path.startsWith("/plugins/servlet/desk/site/gloval/")) {
+            return true;
+        }
+
+        // Desk root homepage
+        if (path.equals("/plugins/servlet/desk") || path.equals("/plugins/servlet/desk/")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private String withQueryString(HttpServletRequest request, String target) {
+        String qs = request.getQueryString();
+        if (qs != null && !qs.isEmpty()) {
+            return target + "?" + qs;
+        }
+        return target;
+    }
+
 
     // Pattern 1: Default Jira Service Management URL
     // Matches: /servicedesk/customer/portal/5 or /servicedesk/customer/portal/5/ or /servicedesk/customer/portal/5/anything
@@ -199,6 +236,35 @@ public class RailCustomerPortalRedirectFilter implements Filter {
             throws IOException {
 
         String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+
+            private boolean handleRedirect(HttpServletRequest request, HttpServletResponse response, String path)
+            throws IOException {
+
+        String contextPath = request.getContextPath() == null ? "" : request.getContextPath();
+
+        // NEW: Always redirect "homepage" legacy URLs to RAIL home (regardless of isLive or skipRail)
+        if (isRailHomeRedirectPath(path)) {
+            String target = withQueryString(request, contextPath + RAIL_HOME_PATH);
+
+            System.out.println(">>> RAIL Filter - HOME REDIRECT: " + request.getRequestURI() + " -> " + target);
+            log.info("RAIL Filter - HOME REDIRECT: {} -> {}", request.getRequestURI(), target);
+
+            response.sendRedirect(target);
+            return true;
+        }
+
+        // Don't redirect if already going to RAIL Portal
+        if (path.contains("/customer-rail")) {
+            System.out.println(">>> RAIL Filter - Already targeting customer-rail, skipping");
+            return false;
+        }
+
+        // Don't redirect if skipRail parameter is present (used when portal is NOT Live)
+        String skipRail = request.getParameter("skipRail");
+        if ("true".equals(skipRail)) {
+            System.out.println(">>> RAIL Filter - skipRail=true, allowing OOTB portal");
+            return false;
+        }
 
         // Don't redirect if already going to RAIL Portal
         if (path.contains("/customer-rail")) {
