@@ -236,3 +236,35 @@ public class PortalConfigDTO {
         Map<String, Object> sampleMap = convertDtoToMap(sample);
         return Response.ok(sampleMap).build();
     }
+
+@POST
+    @Path("portals/project/{projectKey}")
+    public Response savePortalConfig(@PathParam("projectKey") String projectKey, PortalConfigDTO config) {
+        if (config == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(createErrorResponse("Portal payload is required"))
+                    .build();
+        }
+
+        Response denial = enforceProjectAdmin(projectKey);
+        if (denial != null) {
+            return denial;
+        }
+
+        try {
+            log.info("POST /portals/project/{} - Saving portal config", projectKey);
+            log.info("  Received components count: {}", config.getComponents() != null ? config.getComponents().size() : 0);
+
+            PortalConfigDTO saved = portalConfigService.savePortalConfig(projectKey, config);
+
+            log.info("  Saved successfully - components count: {}", saved.getComponents() != null ? saved.getComponents().size() : 0);
+            log.info("  Returning saved config with projectKey: {}, portalId: {}", saved.getProjectKey(), saved.getPortalId());
+
+            // FIX: Convert to Map to bypass Jackson serialization issues
+            return Response.ok(convertDtoToMap(saved)).build();
+        } catch (IllegalArgumentException ex) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(createErrorResponse(ex.getMessage()))
+                    .build();
+        }
+    }
