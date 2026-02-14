@@ -191,4 +191,48 @@ public class PortalConfigDTO {
     }
 }
 
+// ==================== Portal Config Endpoints ====================
 
+    /**
+     * Fetch portal configuration for a project key.
+     *
+     * FIX: Returns Map instead of DTO to bypass JAX-RS Jackson serialization issues.
+     * JAX-RS uses a different Jackson ObjectMapper than PortalConfigService, which
+     * strips all fields except 'live' from the response. Converting to Map works around this.
+     */
+    @GET
+    @Path("portals/project/{projectKey}")
+    public Response getPortalConfigForProject(@PathParam("projectKey") String projectKey) {
+        log.info("GET /portals/project/{} - Fetching portal configuration", projectKey);
+
+        Optional<PortalConfigDTO> config = portalConfigService.getPortalConfig(projectKey);
+
+        if (config.isPresent()) {
+            PortalConfigDTO dto = config.get();
+            log.info("  Config exists - hasComponents: {}, componentsSize: {}",
+                     dto.getComponents() != null,
+                     dto.getComponents() != null ? dto.getComponents().size() : 0);
+
+            // DIAGNOSTIC: Log the DTO before serialization
+            log.info("  DTO before serialization - projectKey: {}, portalId: {}, live: {}, componentsSize: {}",
+                     dto.getProjectKey(), dto.getPortalId(), dto.isLive(),
+                     dto.getComponents() != null ? dto.getComponents().size() : "null");
+
+            // FIX: Convert DTO to Map to bypass Jackson serialization issues
+            Map<String, Object> configMap = convertDtoToMap(dto);
+
+            log.info("  Returning Map with {} components",
+                     ((List<?>) configMap.get("components")).size());
+
+            return Response.ok(configMap).build();
+        }
+
+        log.info("  No config found - creating sample config");
+        PortalConfigDTO sample = buildSamplePortalConfig(projectKey, null);
+        portalConfigService.savePortalConfig(projectKey, sample);
+        log.info("  Sample config created and saved with {} components", sample.getComponents().size());
+
+        // FIX: Convert sample to Map as well
+        Map<String, Object> sampleMap = convertDtoToMap(sample);
+        return Response.ok(sampleMap).build();
+    }
