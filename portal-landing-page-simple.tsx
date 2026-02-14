@@ -176,7 +176,7 @@ export function PortalLandingPageSimple() {
     triggerRecentPortalsUpdate();
 
     if (!portal.isLive && portal.jsmPortalId) {
-      window.open(`/plugins/servlet/desk/portal/${portal.jsmPortalId}/`, '_blank', 'noopener,noreferrer');
+      window.open(`/servicedesk/customer/portal/${portal.jsmPortalId}/`, '_blank', 'noopener,noreferrer');
       return;
     }
     window.location.href = `/plugins/servlet/customer-rail/${portal.projectKey}`;
@@ -222,7 +222,7 @@ export function PortalLandingPageSimple() {
 
       if (match.portalId) {
         window.open(
-          `/plugins/servlet/desk/portal/${match.portalId}/`,
+          `/servicedesk/customer/portal/${match.portalId}/`,
           "_blank",
           "noopener,noreferrer",
         );
@@ -372,7 +372,7 @@ export function PortalLandingPageSimple() {
               {/* My Requests Tab */}
               <TabsContent value="requests" className="mt-4">
                 <StandaloneJQLTable
-                  jqlQuery="reporter = currentUser() ORDER BY created DESC"
+                  jqlQuery="reporter = currentUser() AND project in projectsOfType('service_desk') ORDER BY created DESC"
                   title="My Requests"
                   subtitle="Issues you have submitted"
                   columns={[
@@ -391,7 +391,7 @@ export function PortalLandingPageSimple() {
               {/* My Approvals Tab */}
               <TabsContent value="approvals" className="mt-4">
                 <StandaloneJQLTable
-                  jqlQuery="Approvals = myPending()"
+                  jqlQuery="Approvals = myPending() AND project in projectsOfType('service_desk') ORDER BY created DESC"
                   title="My Approvals"
                   subtitle="Issues awaiting your approval"
                   columns={[
@@ -409,7 +409,7 @@ export function PortalLandingPageSimple() {
               {/* Assigned to Me Tab */}
               <TabsContent value="assigned" className="mt-4">
                 <StandaloneJQLTable
-                  jqlQuery="assignee = currentUser() ORDER BY created DESC"
+                  jqlQuery="assignee = currentUser() AND project in projectsOfType('service_desk') ORDER BY created DESC"
                   title="Assigned to Me"
                   subtitle="Issues assigned to you"
                   columns={[
