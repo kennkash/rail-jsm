@@ -187,6 +187,106 @@ public class RailPortalResource {
     }
 
     /**
+     * Get issues for a specific project (current user's issues)
+     * GET /rest/rail/1.0/projects/{projectKey}/issues?start=0&limit=25
+     */
+    @GET
+    @Path("projects/{projectKey}/issues")
+    public Response getProjectIssues(
+            @PathParam("projectKey") String projectKey,
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues?start={}&limit={}", projectKey, startIndex, pageSize);
+
+        try {
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
+            }
+
+            IssueSearchResponseDTO response = issueService.searchProjectIssues(projectKey, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
+
+        } catch (Exception e) {
+            log.error("Error fetching issues for project: {}", projectKey, e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error fetching project issues: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * Get all issues for a specific project (that user can see)
+     * GET /rest/rail/1.0/projects/{projectKey}/issues/all?start=0&limit=25
+     */
+    @GET
+    @Path("projects/{projectKey}/issues/all")
+    public Response getAllProjectIssues(
+            @PathParam("projectKey") String projectKey,
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues/all?start={}&limit={}", projectKey, startIndex, pageSize);
+
+        try {
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
+            }
+
+            IssueSearchResponseDTO response = issueService.searchAllProjectIssues(projectKey, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
+
+        } catch (Exception e) {
+            log.error("Error fetching all issues for project: {}", projectKey, e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error fetching project issues: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * Get issues for a specific project with additional filter
+     * GET /rest/rail/1.0/projects/{projectKey}/issues/filter?filter=status=Open&start=0&limit=25
+     */
+    @GET
+    @Path("projects/{projectKey}/issues/filter")
+    public Response getProjectIssuesWithFilter(
+            @PathParam("projectKey") String projectKey,
+            @QueryParam("filter") String additionalFilter,
+            @QueryParam("start") @DefaultValue("0") int startIndex,
+            @QueryParam("limit") @DefaultValue("25") int pageSize) {
+        log.debug("GET /projects/{}/issues/filter?filter={}&start={}&limit={}", projectKey, additionalFilter, startIndex, pageSize);
+
+        try {
+            // Check if user can see the project
+            if (!issueService.canUserSeeProject(projectKey)) {
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Access denied to project: " + projectKey))
+                        .build();
+            }
+
+            IssueSearchResponseDTO response = issueService.searchProjectIssuesWithFilter(projectKey, additionalFilter, startIndex, pageSize);
+            return Response.ok(convertIssueSearchResponseToMap(response)).build();
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid filter for project {}: {}", projectKey, additionalFilter, e);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(createErrorResponse("Invalid filter: " + e.getMessage()))
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Error fetching filtered issues for project: {}", projectKey, e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error fetching filtered project issues: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
      * Convert IssueSearchResponseDTO to Map to bypass JAX-RS Jackson serialization issues.
      * Mirrors the PortalConfigDTO workaround so the frontend always receives a stable JSON shape.
      */
@@ -220,8 +320,7 @@ public class RailPortalResource {
         return map;
     }
 
-
-     /**
+    /**
      * Convert IssueDTO to Map for safe JSON serialization.
      */
     private Map<String, Object> convertIssueDtoToMap(IssueDTO issue) {
@@ -271,3 +370,5 @@ public class RailPortalResource {
         return map;
     }
 }
+
+   
