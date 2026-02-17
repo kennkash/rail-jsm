@@ -13,6 +13,7 @@ public class IssueDTO {
     private String id;
     private String summary;
     private String description;
+    private String serviceDeskId; // Added field for Customer Portal linking
     private String status;
     private String statusId;
     private String statusIconUrl;
@@ -76,6 +77,11 @@ public class IssueDTO {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    // --- New Getter/Setter for Service Desk ID ---
+    public String getServiceDeskId() { return serviceDeskId; }
+    public void setServiceDeskId(String serviceDeskId) { this.serviceDeskId = serviceDeskId; }
+    // ---------------------------------------------
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
