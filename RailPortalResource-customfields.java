@@ -17,6 +17,9 @@ import com.atlassian.jira.security.groups.GroupManager;
 import com.atlassian.jira.bc.user.search.UserSearchParams;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.atlassian.sal.api.ApplicationProperties;
+// ADD these imports at the top with your other imports:
+import com.atlassian.jira.issue.fields.CustomField;
+import com.atlassian.jira.issue.fields.config.FieldConfigScheme;
 import com.samsungbuilder.jsm.dto.PortalConfigDTO;
 import com.samsungbuilder.jsm.dto.PortalHistoryDTO;
 import com.samsungbuilder.jsm.dto.ProjectDTO;
@@ -131,117 +134,142 @@ public class RailPortalResource {
         return error;
     }
 
+/**
+ * Get available fields for a project (for JQL table column selection)
+ * GET /rest/rail/1.0/projects/{projectKey}/fields
+ *
+ * Returns system fields and custom fields that can be displayed in the JQL table.
+ */
+@GET
+@Path("projects/{projectKey}/fields")
+public Response getProjectFields(@PathParam("projectKey") String projectKey) {
+    log.debug("GET /projects/{}/fields", projectKey);
 
-    /**
-     * Get available fields for a project (for JQL table column selection)
-     * GET /rest/rail/1.0/projects/{projectKey}/fields
-     *
-     * Returns system fields and custom fields that can be displayed in the JQL table.
-     */
-    @GET
-    @Path("projects/{projectKey}/fields")
-    public Response getProjectFields(@PathParam("projectKey") String projectKey) {
-        log.debug("GET /projects/{}/fields", projectKey);
-
-        try {
-            ApplicationUser currentUser = authenticationContext.getLoggedInUser();
-            if (currentUser == null) {
-                return Response.status(Response.Status.UNAUTHORIZED)
-                        .entity(createErrorResponse("User not authenticated"))
-                        .build();
-            }
-
-            var projectManager = ComponentAccessor.getProjectManager();
-            var project = projectManager.getProjectObjByKey(projectKey);
-
-            if (project == null) {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .entity(createErrorResponse("Project not found: " + projectKey))
-                        .build();
-            }
-
-            // Check if user can see the project
-            var permissionManager = ComponentAccessor.getPermissionManager();
-            if (!permissionManager.hasPermission(com.atlassian.jira.security.Permissions.BROWSE, project, currentUser)) {
-                return Response.status(Response.Status.FORBIDDEN)
-                        .entity(createErrorResponse("Access denied to project: " + projectKey))
-                        .build();
-            }
-
-            // Build list of system fields (these are always available)
-            List<Map<String, Object>> systemFields = new ArrayList<>();
-            systemFields.add(createFieldInfo("key", "Key", "system", false));
-            systemFields.add(createFieldInfo("summary", "Summary", "system", false));
-            systemFields.add(createFieldInfo("status", "Status", "system", false));
-            systemFields.add(createFieldInfo("priority", "Priority", "system", false));
-            systemFields.add(createFieldInfo("issueType", "Issue Type", "system", false));
-            systemFields.add(createFieldInfo("created", "Created", "system", false));
-            systemFields.add(createFieldInfo("updated", "Updated", "system", false));
-            systemFields.add(createFieldInfo("dueDate", "Due Date", "system", false));
-            systemFields.add(createFieldInfo("reporter", "Reporter", "system", false));
-            systemFields.add(createFieldInfo("assignee", "Assignee", "system", false));
-            systemFields.add(createFieldInfo("resolution", "Resolution", "system", false));
-            systemFields.add(createFieldInfo("labels", "Labels", "system", false));
-            systemFields.add(createFieldInfo("components", "Components", "system", false));
-            systemFields.add(createFieldInfo("fixVersions", "Fix Versions", "system", false));
-            systemFields.add(createFieldInfo("affectedVersions", "Affected Versions", "system", false));
-
-            // Get custom fields for the project
-            List<Map<String, Object>> customFields = new ArrayList<>();
-            try {
-                var customFieldManager = ComponentAccessor.getCustomFieldManager();
-                if (customFieldManager != null) {
-                    var allCustomFields = customFieldManager.getCustomFieldObjects();
-                    for (var cf : allCustomFields) {
-                        // Check if custom field is applicable to this project
-                        var associatedProjects = cf.getAssociatedProjectObjects();
-                        boolean isGlobal = associatedProjects == null || associatedProjects.isEmpty();
-                        boolean isForProject = isGlobal || associatedProjects.stream()
-                                .anyMatch(p -> p.getKey().equals(projectKey));
-
-                        if (isForProject) {
-                            String cfId = cf.getId(); // e.g., "customfield_10001"
-                            String cfName = cf.getName();
-                            String cfType = cf.getCustomFieldType() != null
-                                    ? cf.getCustomFieldType().getName()
-                                    : "unknown";
-
-                            Map<String, Object> fieldInfo = createFieldInfo(cfId, cfName, "custom", true);
-                            fieldInfo.put("customFieldType", cfType);
-                            customFields.add(fieldInfo);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Error fetching custom fields for project {}: {}", projectKey, e.getMessage());
-                // Continue without custom fields
-            }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("projectKey", projectKey);
-            response.put("systemFields", systemFields);
-            response.put("customFields", customFields);
-            response.put("totalFields", systemFields.size() + customFields.size());
-
-            return Response.ok(response).build();
-
-        } catch (Exception e) {
-            log.error("Error fetching project fields: projectKey={}", projectKey, e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Error fetching project fields: " + e.getMessage()))
+    try {
+        ApplicationUser currentUser = authenticationContext.getLoggedInUser();
+        if (currentUser == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(createErrorResponse("User not authenticated"))
                     .build();
         }
-    }
 
+        var projectManager = ComponentAccessor.getProjectManager();
+        var project = projectManager.getProjectObjByKey(projectKey);
 
-     /**
-     * Helper method to create field info map
-     */
-    private Map<String, Object> createFieldInfo(String id, String name, String category, boolean isCustom) {
-        Map<String, Object> field = new HashMap<>();
-        field.put("id", id);
-        field.put("name", name);
-        field.put("category", category);
-        field.put("isCustom", isCustom);
-        return field;
+        if (project == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(createErrorResponse("Project not found: " + projectKey))
+                    .build();
+        }
+
+        // Check if user can see the project
+        var permissionManager = ComponentAccessor.getPermissionManager();
+        if (!permissionManager.hasPermission(com.atlassian.jira.security.Permissions.BROWSE, project, currentUser)) {
+            return Response.status(Response.Status.FORBIDDEN)
+                    .entity(createErrorResponse("Access denied to project: " + projectKey))
+                    .build();
+        }
+
+        // Build list of system fields (these are always available)
+        List<Map<String, Object>> systemFields = new ArrayList<>();
+        systemFields.add(createFieldInfo("key", "Key", "system", false));
+        systemFields.add(createFieldInfo("summary", "Summary", "system", false));
+        systemFields.add(createFieldInfo("status", "Status", "system", false));
+        systemFields.add(createFieldInfo("priority", "Priority", "system", false));
+        systemFields.add(createFieldInfo("issueType", "Issue Type", "system", false));
+        systemFields.add(createFieldInfo("created", "Created", "system", false));
+        systemFields.add(createFieldInfo("updated", "Updated", "system", false));
+        systemFields.add(createFieldInfo("dueDate", "Due Date", "system", false));
+        systemFields.add(createFieldInfo("reporter", "Reporter", "system", false));
+        systemFields.add(createFieldInfo("assignee", "Assignee", "system", false));
+        systemFields.add(createFieldInfo("resolution", "Resolution", "system", false));
+        systemFields.add(createFieldInfo("labels", "Labels", "system", false));
+        systemFields.add(createFieldInfo("components", "Components", "system", false));
+        systemFields.add(createFieldInfo("fixVersions", "Fix Versions", "system", false));
+        systemFields.add(createFieldInfo("affectedVersions", "Affected Versions", "system", false));
+
+        // Get custom fields for the project
+        List<Map<String, Object>> customFields = new ArrayList<>();
+        try {
+            var customFieldManager = ComponentAccessor.getCustomFieldManager();
+            if (customFieldManager != null) {
+                var allCustomFields = customFieldManager.getCustomFieldObjects();
+                for (var cf : allCustomFields) {
+
+                    // ✅ FIX: Determine applicability by inspecting ALL field config schemes (contexts)
+                    // A global context is represented by an empty associated-project list on a scheme.
+                    boolean isForProject = isCustomFieldApplicableToProject(cf, project);
+
+                    if (isForProject) {
+                        String cfId = cf.getId(); // e.g., "customfield_10001"
+                        String cfName = cf.getName();
+                        String cfType = cf.getCustomFieldType() != null
+                                ? cf.getCustomFieldType().getName()
+                                : "unknown";
+
+                        Map<String, Object> fieldInfo = createFieldInfo(cfId, cfName, "custom", true);
+                        fieldInfo.put("customFieldType", cfType);
+                        customFields.add(fieldInfo);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error fetching custom fields for project {}: {}", projectKey, e.getMessage());
+            // Continue without custom fields
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("projectKey", projectKey);
+        response.put("systemFields", systemFields);
+        response.put("customFields", customFields);
+        response.put("totalFields", systemFields.size() + customFields.size());
+
+        return Response.ok(response).build();
+
+    } catch (Exception e) {
+        log.error("Error fetching project fields: projectKey={}", projectKey, e);
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(createErrorResponse("Error fetching project fields: " + e.getMessage()))
+                .build();
     }
+}
+
+/**
+ * ✅ NEW helper: context-aware custom field applicability for a project.
+ *
+ * Why this exists:
+ * - cf.getAssociatedProjectObjects() can be misleading when a field has multiple contexts
+ *   (e.g., one global + one or more project-scoped contexts).
+ * - This method returns true if ANY scheme is global OR explicitly includes the project.
+ */
+private boolean isCustomFieldApplicableToProject(CustomField cf, Project project) {
+    try {
+        @SuppressWarnings("unchecked")
+        List<FieldConfigScheme> schemes = (List<FieldConfigScheme>) cf.getConfigurationSchemes();
+
+        if (schemes == null || schemes.isEmpty()) {
+            return false;
+        }
+
+        for (FieldConfigScheme scheme : schemes) {
+            List<Project> associated = scheme.getAssociatedProjectObjects();
+
+            // Global context: applies to ALL projects
+            if (associated == null || associated.isEmpty()) {
+                return true;
+            }
+
+            // Project-scoped context
+            for (Project p : associated) {
+                if (p != null && p.getId() != null && p.getId().equals(project.getId())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    } catch (Exception e) {
+        log.warn("Failed to evaluate context schemes for custom field {}: {}", cf.getId(), e.getMessage());
+        return false;
+    }
+}
