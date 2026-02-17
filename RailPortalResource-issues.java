@@ -121,7 +121,7 @@ public class RailPortalResource {
         this.authenticationContext = authenticationContext;
     }
 
-     /**
+    /**
      * Create a standardized error response
      */
     private Map<String, Object> createErrorResponse(String message) {
@@ -136,18 +136,10 @@ public class RailPortalResource {
     /**
      * Search issues using JQL query with optional server-side search and filter.
      *
-     * Server-side search/filter enables searching across the ENTIRE result set,
-     * not just the current page. This fixes the issue where search only worked
-     * on visible issues.
-     *
-     * GET /rest/rail/1.0/issues/search?jql=query&start=0&limit=25&search=term&status=Open,Done&priority=High
-     *
-     * @param jqlQuery The JQL query (required)
-     * @param startIndex Pagination start index (default: 0)
-     * @param pageSize Number of results per page (default: 25)
-     * @param searchTerm Optional text search (searches key, summary, description)
-     * @param statusFilter Optional comma-separated status names to filter by
-     * @param priorityFilter Optional comma-separated priority names to filter by
+     * GET /rest/rail/1.0/issues/search?jql=query&start=0&limit=25
+     *   &search=term&status=Open,Done&priority=High
+     *   &sortField=status&sortDir=asc
+     *   &facets=true
      */
     @GET
     @Path("issues/search")
@@ -157,9 +149,15 @@ public class RailPortalResource {
             @QueryParam("limit") @DefaultValue("25") int pageSize,
             @QueryParam("search") String searchTerm,
             @QueryParam("status") String statusFilter,
-            @QueryParam("priority") String priorityFilter) {
-        log.debug("GET /issues/search?jql={}&start={}&limit={}&search={}&status={}&priority={}",
-                  jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
+            @QueryParam("priority") String priorityFilter,
+            // NEW: server-side sorting
+            @QueryParam("sortField") String sortField,
+            @QueryParam("sortDir") @DefaultValue("asc") String sortDir,
+            // NEW: facets for dropdowns
+            @QueryParam("facets") @DefaultValue("false") boolean includeFacets
+    ) {
+        log.debug("GET /issues/search?jql={}&start={}&limit={}&search={}&status={}&priority={}&sortField={}&sortDir={}&facets={}",
+                jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, sortField, sortDir, includeFacets);
 
         if (jqlQuery == null || jqlQuery.trim().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -169,7 +167,16 @@ public class RailPortalResource {
 
         try {
             IssueSearchResponseDTO response = issueService.searchIssues(
-                    jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
+                    jqlQuery,
+                    startIndex,
+                    pageSize,
+                    searchTerm,
+                    statusFilter,
+                    priorityFilter,
+                    sortField,
+                    sortDir,
+                    includeFacets
+            );
             return Response.ok(convertIssueSearchResponseToMap(response)).build();
 
         } catch (IllegalArgumentException e) {
@@ -199,7 +206,6 @@ public class RailPortalResource {
         log.debug("GET /projects/{}/issues?start={}&limit={}", projectKey, startIndex, pageSize);
 
         try {
-            // Check if user can see the project
             if (!issueService.canUserSeeProject(projectKey)) {
                 return Response.status(Response.Status.FORBIDDEN)
                         .entity(createErrorResponse("Access denied to project: " + projectKey))
@@ -230,7 +236,6 @@ public class RailPortalResource {
         log.debug("GET /projects/{}/issues/all?start={}&limit={}", projectKey, startIndex, pageSize);
 
         try {
-            // Check if user can see the project
             if (!issueService.canUserSeeProject(projectKey)) {
                 return Response.status(Response.Status.FORBIDDEN)
                         .entity(createErrorResponse("Access denied to project: " + projectKey))
@@ -262,7 +267,6 @@ public class RailPortalResource {
         log.debug("GET /projects/{}/issues/filter?filter={}&start={}&limit={}", projectKey, additionalFilter, startIndex, pageSize);
 
         try {
-            // Check if user can see the project
             if (!issueService.canUserSeeProject(projectKey)) {
                 return Response.status(Response.Status.FORBIDDEN)
                         .entity(createErrorResponse("Access denied to project: " + projectKey))
@@ -288,15 +292,14 @@ public class RailPortalResource {
 
     /**
      * Convert IssueSearchResponseDTO to Map to bypass JAX-RS Jackson serialization issues.
-     * Mirrors the PortalConfigDTO workaround so the frontend always receives a stable JSON shape.
      */
     private Map<String, Object> convertIssueSearchResponseToMap(IssueSearchResponseDTO dto) {
         Map<String, Object> map = new HashMap<>();
 
         List<Map<String, Object>> issueMaps = dto.getIssues() != null
                 ? dto.getIssues().stream()
-                        .map(this::convertIssueDtoToMap)
-                        .collect(Collectors.toList())
+                .map(this::convertIssueDtoToMap)
+                .collect(Collectors.toList())
                 : Collections.emptyList();
 
         map.put("issues", issueMaps);
@@ -317,6 +320,9 @@ public class RailPortalResource {
         map.put("searchedAsUserDisplayName", dto.getSearchedAsUserDisplayName());
         map.put("resolvedJqlQuery", dto.getResolvedJqlQuery());
 
+        // NEW: facets for filter dropdowns
+        map.put("facets", dto.getFacets());
+
         return map;
     }
 
@@ -332,6 +338,7 @@ public class RailPortalResource {
         map.put("status", issue.getStatus());
         map.put("statusId", issue.getStatusId());
         map.put("statusIconUrl", issue.getStatusIconUrl());
+        map.put("statusCategoryKey", issue.getStatusCategoryKey());
         map.put("priority", issue.getPriority());
         map.put("priorityId", issue.getPriorityId());
         map.put("priorityIconUrl", issue.getPriorityIconUrl());
@@ -365,10 +372,7 @@ public class RailPortalResource {
         map.put("timeSpent", issue.getTimeSpent());
         map.put("votes", issue.getVotes());
         map.put("watcherCount", issue.getWatcherCount());
-        // Include custom fields
         map.put("customFields", issue.getCustomFields());
         return map;
     }
 }
-
-   
