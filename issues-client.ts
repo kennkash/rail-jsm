@@ -5,6 +5,11 @@
  * Handles all HTTP requests for Jira issue search and JQL operations
  */
 
+/**
+ * API Client for Issues
+ * Handles all HTTP requests for Jira issue search and JQL operations
+ */
+
 const API_BASE = '/rest/rail/1.0';
 
 export interface Issue {
