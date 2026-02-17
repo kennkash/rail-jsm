@@ -561,11 +561,19 @@ public class IssueService {
             dto.setProjectName(project.getName());
 
             // --- ADDED: Resolve Service Desk ID for Portal Linking ---
+            String serviceDeskId = null;
             try {
-                ServiceDesk serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
-                if (serviceDesk != null) {
-                    String portalId = String.valueOf(serviceDesk.getId());
-                    dto.setServiceDeskId(portalId);
+                com.atlassian.servicedesk.api.ServiceDeskManager sdManager =
+                    ComponentAccessor.getOSGiComponentInstanceOfType(
+                        com.atlassian.servicedesk.api.ServiceDeskManager.class
+                    );
+                if (sdManager != null) {
+                    com.atlassian.servicedesk.api.ServiceDesk serviceDesk =
+                        sdManager.getServiceDeskForProject(project);
+                    if (serviceDesk != null) {
+                        serviceDeskId = String.valueOf(serviceDesk.getId());
+                        dto.setServiceDeskId(serviceDeskId);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Could not resolve Service Desk ID for issue {}: {}", issue.getKey(), e.getMessage());
