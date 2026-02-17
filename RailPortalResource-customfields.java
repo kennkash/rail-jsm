@@ -232,3 +232,16 @@ public class RailPortalResource {
                     .build();
         }
     }
+
+
+     /**
+     * Helper method to create field info map
+     */
+    private Map<String, Object> createFieldInfo(String id, String name, String category, boolean isCustom) {
+        Map<String, Object> field = new HashMap<>();
+        field.put("id", id);
+        field.put("name", name);
+        field.put("category", category);
+        field.put("isCustom", isCustom);
+        return field;
+    }
