@@ -34,10 +34,7 @@ import org.slf4j.LoggerFactory;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.net.URI;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -86,33 +83,40 @@ public class IssueService {
 
     /**
      * Search issues using JQL query (backward compatible - no server-side search/filter)
-     *
-     * @param jqlQuery The JQL query string
-     * @param startIndex The start index for pagination (0-based)
-     * @param pageSize The number of results per page
-     * @return Search response with paginated results
      */
     public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize) {
-        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null);
+        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null, null, null, false);
     }
 
     /**
      * Search issues using JQL query with optional server-side search/filter.
-     * This enables search and filtering across the ENTIRE result set, not just the current page.
-     *
-     * @param jqlQuery The JQL query string
-     * @param startIndex The start index for pagination (0-based)
-     * @param pageSize The number of results per page
-     * @param searchTerm Optional text search term (searches key, summary, and description)
-     * @param statusFilter Optional status filter (comma-separated status names)
-     * @param priorityFilter Optional priority filter (comma-separated priority names)
-     * @return Search response with paginated results
+     * Backward compatible signature (no sort/facets).
      */
     public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize,
-                                                String searchTerm, String statusFilter, String priorityFilter) {
+                                              String searchTerm, String statusFilter, String priorityFilter) {
+        return searchIssues(jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, null, null, false);
+    }
+
+    /**
+     * Search issues using JQL query with:
+     * - optional server-side search/filter (across ENTIRE result set)
+     * - optional server-side sorting (ORDER BY <field> ASC|DESC)
+     * - optional facets for UI filters (distinct statuses/priorities across ENTIRE result set)
+     */
+    public IssueSearchResponseDTO searchIssues(
+            String jqlQuery,
+            int startIndex,
+            int pageSize,
+            String searchTerm,
+            String statusFilter,
+            String priorityFilter,
+            String sortField,
+            String sortDir,
+            boolean includeFacets
+    ) {
         long startTime = System.currentTimeMillis();
-        log.debug("Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}",
-                  jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
+        log.debug("Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}, sortField: {}, sortDir: {}, facets: {}",
+                jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, sortField, sortDir, includeFacets);
 
         ApplicationUser currentUser = authenticationContext.getLoggedInUser();
         if (currentUser == null) {
@@ -128,15 +132,13 @@ public class IssueService {
         String resolvedJql = null;
 
         try {
-            // Validate and sanitize pagination parameters
             int validatedPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
             int validatedStartIndex = Math.max(startIndex, 0);
 
-            // Build enhanced JQL with search/filter terms (server-side filtering)
-            String enhancedJql = buildEnhancedJql(jqlQuery, searchTerm, statusFilter, priorityFilter);
+            // Build enhanced JQL: base + search/filter + ORDER BY override (if provided)
+            String enhancedJql = buildEnhancedJql(jqlQuery, searchTerm, statusFilter, priorityFilter, sortField, sortDir);
             log.debug("Enhanced JQL: {}", enhancedJql);
 
-            // Parse and validate the enhanced JQL query
             SearchService.ParseResult parseResult = searchService.parseQuery(currentUser, enhancedJql);
             if (!parseResult.isValid()) {
                 log.warn("Invalid JQL query: {} - Errors: {}", enhancedJql, parseResult.getErrors());
@@ -146,16 +148,19 @@ public class IssueService {
             Query query = parseResult.getQuery();
             PagerFilter pagerFilter = new PagerFilter(validatedStartIndex, validatedPageSize);
 
-            // Get the resolved JQL query string (with currentUser() replaced)
+            // Resolved JQL (with currentUser() resolved)
             resolvedJql = query.getQueryString();
 
-            // If user cannot browse the project, fall back to service desk customer requests
+            // Determine project key for fallback logic
             projectKeyFromJql = extractProjectKeyFromJql(jqlQuery);
             if (projectKeyFromJql == null) {
                 projectKeyFromJql = extractProjectKeyFromJql(resolvedJql);
             }
+
+            // If user cannot browse project, fall back to service desk customer requests
             if (shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
-                log.debug("Using Service Desk customer request fallback for user {} in project {}", currentUser.getKey(), projectKeyFromJql);
+                log.debug("Using Service Desk customer request fallback for user {} in project {}",
+                        currentUser.getKey(), projectKeyFromJql);
                 IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
                         projectKeyFromJql,
                         validatedStartIndex,
@@ -166,24 +171,24 @@ public class IssueService {
                         startTime
                 );
                 if (fallbackResponse != null) {
+                    // NOTE: facets/sort are not supported in the service desk fallback path here.
+                    // If you need facets there too, we can add a separate paging aggregator using customerRequestService.
                     return fallbackResponse;
                 }
             }
 
-            // Execute search
+            // Execute search (paged)
             SearchResults searchResults = searchService.search(currentUser, query, pagerFilter);
             Collection<Issue> issues = searchResults.getResults();
 
-            // Convert to DTOs
             List<IssueDTO> issueDTOs = issues.stream()
                     .map(this::convertToDTO)
                     .collect(Collectors.toList());
 
             int total = searchResults.getTotal();
 
-            // If we got no results but this is a service desk project and the user lacks Browse, try the customer fallback
+            // If no results and fallback should apply, try it
             if (total == 0 && projectKeyFromJql != null && shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
-                log.debug("Zero results from JQL search; attempting service desk fallback for user {} project {}", currentUser.getKey(), projectKeyFromJql);
                 IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
                         projectKeyFromJql,
                         validatedStartIndex,
@@ -198,12 +203,6 @@ public class IssueService {
                 }
             }
 
-            if (total == 0) {
-                log.info("Issue search returned no results for JQL '{}' (user: {}, resolvedJql: {}, startIndex: {}, pageSize: {})",
-                        jqlQuery, currentUser.getKey(), resolvedJql, validatedStartIndex, validatedPageSize);
-            }
-
-            // Build response with user context for debugging
             IssueSearchResponseDTO response = new IssueSearchResponseDTO(
                     issueDTOs,
                     total,
@@ -212,37 +211,20 @@ public class IssueService {
             );
             response.setJqlQuery(jqlQuery);
             response.setExecutionTimeMs(System.currentTimeMillis() - startTime);
-
-            // Add user context for permission debugging
             response.setSearchedAsUserKey(currentUser.getKey());
             response.setSearchedAsUserName(currentUser.getUsername());
             response.setSearchedAsUserDisplayName(currentUser.getDisplayName());
             response.setResolvedJqlQuery(resolvedJql);
 
-            log.debug("Issue search completed: {} results out of {} total ({}ms) - searched as user: {} ({})",
-                    issueDTOs.size(), total, response.getExecutionTimeMs(),
-                    currentUser.getDisplayName(), currentUser.getKey());
+            // NEW: facets (distinct statuses/priorities across ENTIRE result set)
+            if (includeFacets) {
+                response.setFacets(computeFacetsPaged(currentUser, query));
+            }
 
             return response;
 
         } catch (SearchException e) {
             log.error("Error executing issue search with JQL: {}", jqlQuery, e);
-            if (projectKeyFromJql != null && shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
-                int validatedPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
-                int validatedStartIndex = Math.max(startIndex, 0);
-                IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
-                        projectKeyFromJql,
-                        validatedStartIndex,
-                        validatedPageSize,
-                        currentUser,
-                        jqlQuery,
-                        resolvedJql,
-                        startTime
-                );
-                if (fallbackResponse != null) {
-                    return fallbackResponse;
-                }
-            }
             throw new RuntimeException("Issue search failed: " + e.getMessage(), e);
         } catch (Exception e) {
             log.error("Unexpected error during issue search", e);
@@ -252,11 +234,6 @@ public class IssueService {
 
     /**
      * Search issues for a specific project with current user filter
-     *
-     * @param projectKey The project key
-     * @param startIndex The start index for pagination
-     * @param pageSize The number of results per page
-     * @return Search response with paginated results
      */
     public IssueSearchResponseDTO searchProjectIssues(String projectKey, int startIndex, int pageSize) {
         String jql = String.format("project = %s AND reporter = currentUser() ORDER BY created DESC", projectKey);
@@ -267,11 +244,6 @@ public class IssueService {
 
     /**
      * Search issues for a specific project (all issues user can see)
-     *
-     * @param projectKey The project key
-     * @param startIndex The start index for pagination
-     * @param pageSize The number of results per page
-     * @return Search response with paginated results
      */
     public IssueSearchResponseDTO searchAllProjectIssues(String projectKey, int startIndex, int pageSize) {
         String jql = String.format("project = %s ORDER BY created DESC", projectKey);
@@ -288,7 +260,7 @@ public class IssueService {
         String jql = additionalFilter != null && !additionalFilter.trim().isEmpty()
                 ? baseJql + " AND " + additionalFilter + " ORDER BY created DESC"
                 : baseJql + " ORDER BY created DESC";
-        
+
         IssueSearchResponseDTO response = searchIssues(jql, startIndex, pageSize);
         response.setProjectKey(projectKey);
         return response;
@@ -328,7 +300,6 @@ public class IssueService {
 
         try {
             CustomerRequestQuery.Builder builder = customerRequestService.newQueryBuilder()
-                    // ALL_ORGANIZATIONS_AND_GROUPS matches JSM portal visibility (reporter + org + shared groups)
                     .requestOwnership(CustomerRequestQuery.REQUEST_OWNERSHIP.ALL_ORGANIZATIONS_AND_GROUPS)
                     .pagedRequest(SimplePagedRequest.paged(validatedStartIndex, validatedPageSize));
 
@@ -337,7 +308,6 @@ public class IssueService {
             }
 
             CustomerRequestQuery query = builder.build();
-
             PagedResponse<CustomerRequest> response = customerRequestService.getCustomerRequests(currentUser, query);
 
             List<IssueDTO> issueDTOs = response.getResults().stream()
@@ -363,9 +333,6 @@ public class IssueService {
             dto.setSearchedAsUserKey(currentUser.getKey());
             dto.setSearchedAsUserName(currentUser.getUsername());
             dto.setSearchedAsUserDisplayName(currentUser.getDisplayName());
-
-            log.debug("Service desk fallback returned {} requests (hasNextPage: {}) for user {} in project {}",
-                    issueDTOs.size(), response.hasNextPage(), currentUser.getKey(), projectKey);
 
             return dto;
         } catch (Exception ex) {
@@ -424,38 +391,37 @@ public class IssueService {
     }
 
     /**
-     * Build enhanced JQL by appending search and filter clauses.
-     * This enables server-side search/filtering across the ENTIRE result set,
-     * not just the current page (which is the key fix for the JQL table issues).
-     *
-     * @param baseJql The original JQL query
-     * @param searchTerm Text to search in summary, description, and key
-     * @param statusFilter Comma-separated list of status names to filter by
-     * @param priorityFilter Comma-separated list of priority names to filter by
-     * @return Enhanced JQL with search/filter clauses appended
+     * Build enhanced JQL by appending search and filter clauses,
+     * and optionally overriding ORDER BY for server-side sorting.
      */
-    private String buildEnhancedJql(String baseJql, String searchTerm, String statusFilter, String priorityFilter) {
+    private String buildEnhancedJql(
+            String baseJql,
+            String searchTerm,
+            String statusFilter,
+            String priorityFilter,
+            String sortField,
+            String sortDir
+    ) {
         if (baseJql == null || baseJql.trim().isEmpty()) {
             baseJql = "";
         }
 
         StringBuilder enhancedJql = new StringBuilder();
 
-        // Extract ORDER BY clause if present (we need to append it at the end)
-        String orderByClause = "";
+        // Extract ORDER BY clause if present
+        String baseOrderByClause = "";
         String jqlWithoutOrder = baseJql;
         int orderByIndex = baseJql.toUpperCase().lastIndexOf("ORDER BY");
         if (orderByIndex > 0) {
-            orderByClause = baseJql.substring(orderByIndex);
+            baseOrderByClause = baseJql.substring(orderByIndex).trim();
             jqlWithoutOrder = baseJql.substring(0, orderByIndex).trim();
         }
 
-        // Start with base JQL (without ORDER BY)
         if (!jqlWithoutOrder.isEmpty()) {
             enhancedJql.append("(").append(jqlWithoutOrder).append(")");
         }
 
-        // Add text search clause (search in key, summary, and description)
+        // Text search clause
         if (searchTerm != null && !searchTerm.trim().isEmpty()) {
             String trimmedSearch = searchTerm.trim();
             String sanitizedSearch = sanitizeJqlValue(trimmedSearch);
@@ -463,25 +429,19 @@ public class IssueService {
                 enhancedJql.append(" AND ");
             }
 
-            // Check if search term looks like an issue key (e.g., "WMPR-123" or "ABC-1")
-            // Pattern: uppercase letters followed by dash and numbers
             boolean looksLikeIssueKey = trimmedSearch.matches("^[A-Za-z]+-\\d+$");
 
             if (looksLikeIssueKey) {
-                // For issue keys, use exact match on key field (case-insensitive in Jira)
                 enhancedJql.append("(key = \"").append(sanitizedSearch.toUpperCase()).append("\"")
-                           .append(" OR summary ~ \"").append(sanitizedSearch).append("\"")
-                           .append(" OR description ~ \"").append(sanitizedSearch).append("\")");
+                        .append(" OR summary ~ \"").append(sanitizedSearch).append("\"")
+                        .append(" OR description ~ \"").append(sanitizedSearch).append("\")");
             } else {
-                // For general text search, use "text" field which searches across multiple fields
-                // The "text" field is more robust with special characters like dashes
-                // Also add explicit key search for partial key matches
                 enhancedJql.append("(text ~ \"").append(sanitizedSearch).append("\"")
-                           .append(" OR key ~ \"").append(sanitizedSearch).append("\")");
+                        .append(" OR key ~ \"").append(sanitizedSearch).append("\")");
             }
         }
 
-        // Add status filter clause
+        // Status filter clause
         if (statusFilter != null && !statusFilter.trim().isEmpty()) {
             String[] statuses = statusFilter.split(",");
             if (statuses.length > 0) {
@@ -497,7 +457,7 @@ public class IssueService {
             }
         }
 
-        // Add priority filter clause
+        // Priority filter clause
         if (priorityFilter != null && !priorityFilter.trim().isEmpty()) {
             String[] priorities = priorityFilter.split(",");
             if (priorities.length > 0) {
@@ -513,9 +473,12 @@ public class IssueService {
             }
         }
 
-        // Append ORDER BY clause at the end
-        if (!orderByClause.isEmpty()) {
-            enhancedJql.append(" ").append(orderByClause);
+        // ORDER BY: prefer UI override if provided, else keep base ORDER BY
+        String uiOrderByClause = buildOrderByClause(sortField, sortDir);
+        if (!uiOrderByClause.isEmpty()) {
+            enhancedJql.append(" ").append(uiOrderByClause);
+        } else if (!baseOrderByClause.isEmpty()) {
+            enhancedJql.append(" ").append(baseOrderByClause);
         }
 
         String result = enhancedJql.toString().trim();
@@ -523,15 +486,99 @@ public class IssueService {
     }
 
     /**
+     * Whitelist supported ORDER BY fields to prevent JQL injection.
+     * Allows common system fields + customfield_XXXXX.
+     */
+    private String buildOrderByClause(String sortField, String sortDir) {
+        if (sortField == null || sortField.trim().isEmpty()) {
+            return "";
+        }
+
+        String dir = "ASC";
+        if ("desc".equalsIgnoreCase(sortDir)) {
+            dir = "DESC";
+        }
+
+        String field;
+        switch (sortField) {
+            case "key": field = "key"; break;
+            case "summary": field = "summary"; break;
+            case "status": field = "status"; break;
+            case "priority": field = "priority"; break;
+            case "issueType": field = "issuetype"; break;
+            case "created": field = "created"; break;
+            case "updated": field = "updated"; break;
+            case "dueDate": field = "duedate"; break;
+            case "reporter": field = "reporter"; break;
+            case "assignee": field = "assignee"; break;
+            case "resolution": field = "resolution"; break;
+            default:
+                // Optional: allow sorting by customfield_12345
+                if (sortField.startsWith("customfield_") && sortField.matches("^customfield_\\d+$")) {
+                    field = sortField;
+                } else {
+                    return "";
+                }
+        }
+
+        return "ORDER BY " + field + " " + dir;
+    }
+
+    /**
      * Sanitize a value for safe use in JQL queries.
-     * Escapes special characters to prevent JQL injection.
      */
     private String sanitizeJqlValue(String value) {
         if (value == null) return "";
-        // Escape backslashes first, then quotes
         return value.replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("'", "\\'");
+                .replace("\"", "\\\"")
+                .replace("'", "\\'");
+    }
+
+    /**
+     * Compute facets across ENTIRE result set by paging internally and aggregating distinct values.
+     * NOTE: This does NOT return all issues; it only collects distinct status/priority values.
+     */
+    private Map<String, List<String>> computeFacetsPaged(ApplicationUser user, Query query) {
+        final int facetPageSize = 500; // tune as needed
+
+        Set<String> statuses = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        Set<String> priorities = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+
+        int startAt = 0;
+        while (true) {
+            PagerFilter pf = new PagerFilter(startAt, facetPageSize);
+            SearchResults sr;
+            try {
+                sr = searchService.search(user, query, pf);
+            } catch (SearchException e) {
+                log.warn("Facet paging failed: {}", e.getMessage());
+                break;
+            }
+
+            Collection<Issue> issues = sr.getResults();
+            if (issues == null || issues.isEmpty()) {
+                break;
+            }
+
+            for (Issue i : issues) {
+                if (i.getStatus() != null && i.getStatus().getName() != null) {
+                    statuses.add(i.getStatus().getName());
+                }
+                if (i.getPriority() != null && i.getPriority().getName() != null) {
+                    priorities.add(i.getPriority().getName());
+                }
+            }
+
+            startAt += issues.size();
+            if (startAt >= sr.getTotal()) {
+                break;
+            }
+        }
+
+        Map<String, List<String>> facets = new HashMap<>();
+        facets.put("statuses", new ArrayList<>(statuses));
+        facets.put("priorities", new ArrayList<>(priorities));
+        return facets;
     }
 
     private int estimateTotalCount(int startIndex, int resultSize, boolean hasNextPage, int pageSize) {
@@ -547,29 +594,26 @@ public class IssueService {
      */
     private IssueDTO convertToDTO(Issue issue) {
         IssueDTO dto = new IssueDTO();
-        
-        // Basic issue information
+
         dto.setId(issue.getId().toString());
         dto.setKey(issue.getKey());
         dto.setSummary(issue.getSummary());
         dto.setDescription(issue.getDescription());
-        
-        // Project information
+
         Project project = issue.getProjectObject();
         if (project != null) {
             dto.setProjectKey(project.getKey());
             dto.setProjectName(project.getName());
 
-            // --- ADDED: Resolve Service Desk ID for Portal Linking ---
             String serviceDeskId = null;
             try {
                 com.atlassian.servicedesk.api.ServiceDeskManager sdManager =
-                    ComponentAccessor.getOSGiComponentInstanceOfType(
-                        com.atlassian.servicedesk.api.ServiceDeskManager.class
-                    );
+                        ComponentAccessor.getOSGiComponentInstanceOfType(
+                                com.atlassian.servicedesk.api.ServiceDeskManager.class
+                        );
                 if (sdManager != null) {
                     com.atlassian.servicedesk.api.ServiceDesk serviceDesk =
-                        sdManager.getServiceDeskForProject(project);
+                            sdManager.getServiceDeskForProject(project);
                     if (serviceDesk != null) {
                         serviceDeskId = String.valueOf(serviceDesk.getId());
                         dto.setServiceDeskId(serviceDeskId);
@@ -578,41 +622,34 @@ public class IssueService {
             } catch (Exception e) {
                 log.warn("Could not resolve Service Desk ID for issue {}: {}", issue.getKey(), e.getMessage());
             }
-            // ---------------------------------------------------------
         }
-        
-        // Status information
+
         if (issue.getStatus() != null) {
             dto.setStatus(issue.getStatus().getName());
             dto.setStatusId(issue.getStatus().getId());
             dto.setStatusIconUrl(issue.getStatus().getIconUrl());
-            // Status category for badge coloring (new = To Do, indeterminate = In Progress, done = Done)
             if (issue.getStatus().getStatusCategory() != null) {
                 dto.setStatusCategoryKey(issue.getStatus().getStatusCategory().getKey());
             }
         }
-        
-        // Priority information
+
         Priority priority = issue.getPriority();
         if (priority != null) {
             dto.setPriority(priority.getName());
             dto.setPriorityId(priority.getId());
             dto.setPriorityIconUrl(priority.getIconUrl());
         }
-        
-        // Issue type information
+
         if (issue.getIssueType() != null) {
             dto.setIssueType(issue.getIssueType().getName());
             dto.setIssueTypeId(issue.getIssueType().getId());
             dto.setIssueTypeIconUrl(issue.getIssueType().getIconUrl());
         }
-        
-        // Date information
+
         dto.setCreated(issue.getCreated());
         dto.setUpdated(issue.getUpdated());
         dto.setDueDate(issue.getDueDate());
-        
-        // Reporter information
+
         ApplicationUser reporter = issue.getReporter();
         if (reporter != null) {
             dto.setReporter(reporter.getKey());
@@ -620,8 +657,7 @@ public class IssueService {
             dto.setReporterEmailAddress(reporter.getEmailAddress());
             dto.setReporterAvatarUrl(getAvatarUrl(reporter));
         }
-        
-        // Assignee information
+
         ApplicationUser assignee = issue.getAssignee();
         if (assignee != null) {
             dto.setAssignee(assignee.getKey());
@@ -629,52 +665,45 @@ public class IssueService {
             dto.setAssigneeEmailAddress(assignee.getEmailAddress());
             dto.setAssigneeAvatarUrl(getAvatarUrl(assignee));
         }
-        
-        // Resolution information
+
         if (issue.getResolution() != null) {
             dto.setResolution(issue.getResolution().getName());
             dto.setResolutionId(issue.getResolution().getId());
             dto.setResolutionDate(issue.getResolutionDate());
         }
-        
-        // Labels
+
         if (issue.getLabels() != null && !issue.getLabels().isEmpty()) {
             dto.setLabels(issue.getLabels().stream()
                     .map(Object::toString)
                     .toArray(String[]::new));
         }
 
-        // Components
         if (issue.getComponents() != null) {
             dto.setComponents(issue.getComponents().stream()
                     .map(component -> component.getName())
                     .toArray(String[]::new));
         }
-        
-        // Versions
+
         if (issue.getFixVersions() != null) {
             dto.setFixVersions(issue.getFixVersions().stream()
                     .map(version -> version.getName())
                     .toArray(String[]::new));
         }
-        
+
         if (issue.getAffectedVersions() != null) {
             dto.setAffectedVersions(issue.getAffectedVersions().stream()
                     .map(version -> version.getName())
                     .toArray(String[]::new));
         }
-        
-        // Time tracking
+
         dto.setTimeOriginalEstimate(issue.getOriginalEstimate());
         dto.setTimeEstimate(issue.getEstimate());
         dto.setTimeSpent(issue.getTimeSpent());
 
-        // Other fields
         dto.setEnvironment(issue.getEnvironment());
         dto.setVotes(issue.getVotes() != null ? issue.getVotes().intValue() : null);
         dto.setWatcherCount(issue.getWatches() != null ? issue.getWatches().intValue() : null);
 
-        // Extract custom field values
         try {
             var customFieldManager = com.atlassian.jira.component.ComponentAccessor.getCustomFieldManager();
             if (customFieldManager != null) {
@@ -696,29 +725,12 @@ public class IssueService {
         return dto;
     }
 
-    /**
-     * Extract display value from custom field value
-     * Handles various Jira custom field types including:
-     * - String, Number, Date
-     * - User Picker (single and multi)
-     * - Select (single and multi)
-     * - Cascading Select
-     * - Labels
-     * - JSM Assets/Objects
-     */
     private String extractCustomFieldDisplayValue(com.atlassian.jira.issue.fields.CustomField cf, Object value) {
         try {
             if (value == null) {
                 return null;
             }
 
-            // Get custom field type key for type-specific handling
-            String typeKey = "";
-            if (cf.getCustomFieldType() != null) {
-                typeKey = cf.getCustomFieldType().getKey();
-            }
-
-            // Handle common custom field types
             if (value instanceof String) {
                 return (String) value;
             } else if (value instanceof Number) {
@@ -728,10 +740,8 @@ public class IssueService {
             } else if (value instanceof com.atlassian.jira.issue.customfields.option.Option) {
                 return ((com.atlassian.jira.issue.customfields.option.Option) value).getValue();
             } else if (value instanceof ApplicationUser) {
-                // Single User Picker
                 return ((ApplicationUser) value).getDisplayName();
             } else if (value instanceof java.util.Map) {
-                // Handle Cascading Select (stored as Map<String, Option>)
                 java.util.Map<?, ?> map = (java.util.Map<?, ?>) value;
                 StringBuilder sb = new StringBuilder();
                 Object parent = map.get("");
@@ -745,7 +755,6 @@ public class IssueService {
                 }
                 return sb.length() > 0 ? sb.toString() : null;
             } else if (value instanceof java.util.Collection) {
-                // Handle multi-select, multi-user, labels, assets, etc.
                 java.util.Collection<?> collection = (java.util.Collection<?>) value;
                 if (collection.isEmpty()) {
                     return null;
@@ -760,7 +769,6 @@ public class IssueService {
                 }
                 return sb.length() > 0 ? sb.toString() : null;
             } else {
-                // Fallback: Try to extract display value from object using reflection or toString
                 return extractObjectDisplayValue(value);
             }
         } catch (Exception e) {
@@ -770,9 +778,6 @@ public class IssueService {
         }
     }
 
-    /**
-     * Extract value from a collection item (for multi-value fields)
-     */
     private String extractCollectionItemValue(Object item) {
         if (item == null) {
             return null;
@@ -787,21 +792,15 @@ public class IssueService {
         } else if (item instanceof com.atlassian.jira.issue.label.Label) {
             return ((com.atlassian.jira.issue.label.Label) item).getLabel();
         } else {
-            // Try common interface methods for Assets and other objects
             return extractObjectDisplayValue(item);
         }
     }
 
-    /**
-     * Extract display value from an unknown object type
-     * Tries common method names used by Jira objects
-     */
     private String extractObjectDisplayValue(Object obj) {
         if (obj == null) {
             return null;
         }
 
-        // Try common method names that Jira objects typically have
         String[] methodNames = {"getName", "getDisplayName", "getLabel", "getValue", "getKey", "getObjectLabel", "getObjectKey"};
 
         for (String methodName : methodNames) {
@@ -815,13 +814,12 @@ public class IssueService {
                     }
                 }
             } catch (NoSuchMethodException e) {
-                // Method doesn't exist, try next
+                // ignore
             } catch (Exception e) {
                 log.trace("Error invoking {} on {}: {}", methodName, obj.getClass().getSimpleName(), e.getMessage());
             }
         }
 
-        // Last resort: toString, but only if it looks like a meaningful value
         String str = obj.toString();
         if (!str.contains("@") && str.length() < 500) {
             return str;
@@ -831,9 +829,6 @@ public class IssueService {
         return null;
     }
 
-    /**
-     * Get user avatar URL
-     */
     private String getAvatarUrl(ApplicationUser user) {
         try {
             if (avatarService != null && user != null) {
@@ -846,9 +841,6 @@ public class IssueService {
         return null;
     }
 
-    /**
-     * Create an empty response for error cases
-     */
     private IssueSearchResponseDTO createEmptyResponse(String jqlQuery, int startIndex, int pageSize) {
         IssueSearchResponseDTO response = new IssueSearchResponseDTO(
                 Collections.emptyList(), 0, startIndex, pageSize
@@ -858,9 +850,6 @@ public class IssueService {
         return response;
     }
 
-    /**
-     * Validate if user has permission to see issues in project
-     */
     public boolean canUserSeeProject(String projectKey) {
         try {
             ApplicationUser currentUser = authenticationContext.getLoggedInUser();
@@ -873,7 +862,6 @@ public class IssueService {
                 return false;
             }
 
-            // Try a simple search to check permissions
             String testJql = String.format("project = %s", projectKey);
             SearchService.ParseResult parseResult = searchService.parseQuery(currentUser, testJql);
             return parseResult.isValid();
