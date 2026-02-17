@@ -2,6 +2,7 @@
 package com.samsungbuilder.jsm.dto;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Response DTO for Issue Search operations
@@ -23,6 +24,14 @@ public class IssueSearchResponseDTO {
     private String searchedAsUserName;
     private String searchedAsUserDisplayName;
     private String resolvedJqlQuery; // The JQL after currentUser() is resolved
+
+    // NEW: facets for filter dropdowns (distinct values across ENTIRE result set)
+    // Expected shape:
+    // {
+    //   "statuses": ["Open", "In Progress", "Done"],
+    //   "priorities": ["Highest", "High", "Medium", "Low"]
+    // }
+    private Map<String, List<String>> facets;
 
     public IssueSearchResponseDTO() {
     }
@@ -75,6 +84,9 @@ public class IssueSearchResponseDTO {
 
     public String getResolvedJqlQuery() { return resolvedJqlQuery; }
     public void setResolvedJqlQuery(String resolvedJqlQuery) { this.resolvedJqlQuery = resolvedJqlQuery; }
+
+    public Map<String, List<String>> getFacets() { return facets; }
+    public void setFacets(Map<String, List<String>> facets) { this.facets = facets; }
 
     public int getCurrentPage() {
         return pageSize > 0 ? (startIndex / pageSize) + 1 : 1;
