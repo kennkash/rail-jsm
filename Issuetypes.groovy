@@ -1,23 +1,29 @@
 [
-  [
-    "[projectKey:PLASMA",
-    " projectId:12902",
-    " customFieldId:customfield_10516",
-    " customFieldName:Change Start Date/Time",
-    " applicableByContext:true",
-    " schemesFound:3",
-    " schemes:[[schemeId:10725",
-    " schemeName:Default Configuration Scheme for Change start date",
-    " associatedKeys:[]",
-    " isGlobal:true]",
-    " [schemeId:17530",
-    " schemeName:SSPM - Cloud ATL Context",
-    " associatedKeys:[SSPM]",
-    " isGlobal:false]",
-    " [schemeId:18113",
-    " schemeName:MIDST - Cloud ATL Context",
-    " associatedKeys:[MIDST]",
-    " isGlobal:false]]]"
+  projectKey: PLASMA,
+  projectId: 12902,
+  customFieldId: customfield_10516,
+  customFieldName: Change Start Date/Time,
+  applicableByContext: true,
+  schemesFound: 3,
+  schemes: [
+    [
+      schemeId: 10725,
+      schemeName: Default Configuration Scheme for Change start date,
+      associatedKeys: [],
+      isGlobal: true
+    ],
+    [
+      schemeId: 17530,
+      schemeName: SSPM - Cloud ATL Context,
+      associatedKeys: [SSPM],
+      isGlobal: false
+    ],
+    [
+      schemeId: 18113,
+      schemeName: MIDST - Cloud ATL Context,
+      associatedKeys: [MIDST],
+      isGlobal: false
+    ]
   ]
 ]
 
