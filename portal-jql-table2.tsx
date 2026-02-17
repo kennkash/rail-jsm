@@ -1,3 +1,6 @@
+              ) : (
+                sortedIssues.map((issue) => (
+                  <TableRow key={issue.key} className="hover:bg-muted transition-colors">
                     {columns.map((column) => (
                       <TableCell key={column.id}>
                         {column.id === "status" ? (
@@ -22,7 +25,7 @@
                           </Badge>
                         ) : column.id === "key" ? (
                           (() => {
-                            const issueUrl = buildIssueUrl(issue.key);
+                            const issueUrl = buildIssueUrl(issue);
                             const keyText = getIssueFieldValue(issue, column);
                             if (!issueUrl) {
                               return (
@@ -57,7 +60,7 @@
                     ))}
                     <TableCell>
                       {(() => {
-                        const issueUrl = buildIssueUrl(issue.key);
+                        const issueUrl = buildIssueUrl(issue);
                         if (!issueUrl) return null;
                         return (
                           <a
