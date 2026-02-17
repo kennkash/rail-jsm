@@ -398,14 +398,16 @@ export function PortalJQLTable(
     });
   }, [issues, sortColumn, sortDirection]);
 
-  const buildIssueUrl = (issueKey?: string | null): string | null => {
-    if (!issueKey) return null;
-    // Only use customer portal links for Service Management (JSM) projects
-    // Software projects should always use standard Jira issue view
-    if (useCustomerPortalLinks && serviceDeskId && isServiceDesk) {
-      return `/servicedesk/customer/portal/${serviceDeskId}/${issueKey}`;
+  const buildIssueUrl = (issue: Issue): string | null => {
+    if (!issue?.key) return null;
+
+    // Per-issue descision: only use portal link when THIS issue has a serviceDeskId
+    const issueServiceDeskId = issue.serviceDeskId;
+
+    if (useCustomerPortalLinks && issueServiceDeskId) {
+      return `/servicedesk/customer/portal/${issueServiceDeskId}/${issue.key}`;
     }
-    return `/browse/${issueKey}`;
+    return `/browse/${issue.key}`;
   };
 
   // Status category colors based on Jira Data Center standard categories
@@ -994,6 +996,4 @@ export function PortalJQLTable(
                     )}
                   </TableCell>
                 </TableRow>
-              ) : (
-                sortedIssues.map((issue) => (
-                  <TableRow key={issue.key} className="hover:bg-muted transition-colors">
+
