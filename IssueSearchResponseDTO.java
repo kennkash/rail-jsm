@@ -2,7 +2,6 @@
 package com.samsungbuilder.jsm.dto;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Response DTO for Issue Search operations
@@ -25,13 +24,10 @@ public class IssueSearchResponseDTO {
     private String searchedAsUserDisplayName;
     private String resolvedJqlQuery; // The JQL after currentUser() is resolved
 
-    // NEW: facets for filter dropdowns (distinct values across ENTIRE result set)
-    // Expected shape:
-    // {
-    //   "statuses": ["Open", "In Progress", "Done"],
-    //   "priorities": ["Highest", "High", "Medium", "Low"]
-    // }
-    private Map<String, List<String>> facets;
+    // NEW: facets for server-side filter dropdowns (computed across full result set)
+    private List<String> facetStatuses;
+    private List<String> facetPriorities;
+    private boolean facetTruncated;
 
     public IssueSearchResponseDTO() {
     }
@@ -85,8 +81,15 @@ public class IssueSearchResponseDTO {
     public String getResolvedJqlQuery() { return resolvedJqlQuery; }
     public void setResolvedJqlQuery(String resolvedJqlQuery) { this.resolvedJqlQuery = resolvedJqlQuery; }
 
-    public Map<String, List<String>> getFacets() { return facets; }
-    public void setFacets(Map<String, List<String>> facets) { this.facets = facets; }
+    // NEW: facets
+    public List<String> getFacetStatuses() { return facetStatuses; }
+    public void setFacetStatuses(List<String> facetStatuses) { this.facetStatuses = facetStatuses; }
+
+    public List<String> getFacetPriorities() { return facetPriorities; }
+    public void setFacetPriorities(List<String> facetPriorities) { this.facetPriorities = facetPriorities; }
+
+    public boolean isFacetTruncated() { return facetTruncated; }
+    public void setFacetTruncated(boolean facetTruncated) { this.facetTruncated = facetTruncated; }
 
     public int getCurrentPage() {
         return pageSize > 0 ? (startIndex / pageSize) + 1 : 1;
