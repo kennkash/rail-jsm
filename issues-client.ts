@@ -109,6 +109,12 @@ export interface IssueSearchParams {
   statusFilter?: string;
   /** Server-side priority filter (comma-separated priority names) */
   priorityFilter?: string;
+  /** Server-side sort field (applies to the ENTIRE result set, not just current page) */
+  sortField?: string;
+  /** Server-side sort direction (asc|desc). Default handled server-side. */
+  sortDir?: 'asc' | 'desc';
+  /** Include facets (status + priority) computed across the ENTIRE result set */
+  includeFacets?: boolean;
 }
 
 /**
@@ -116,7 +122,17 @@ export interface IssueSearchParams {
  * Server-side search enables searching across the ENTIRE result set, not just the current page.
  */
 export async function searchIssues(params: IssueSearchParams): Promise<IssueSearchResponse> {
-  const { jqlQuery, startIndex = 0, pageSize = 25, searchTerm, statusFilter, priorityFilter } = params;
+  const {
+    jqlQuery,
+    startIndex = 0,
+    pageSize = 25,
+    searchTerm,
+    statusFilter,
+    priorityFilter,
+    sortField,
+    sortDir,
+    includeFacets,
+  } = params;
 
   if (!jqlQuery) {
     throw new Error('JQL query is required');
@@ -137,6 +153,20 @@ export async function searchIssues(params: IssueSearchParams): Promise<IssueSear
   }
   if (priorityFilter && priorityFilter.trim()) {
     searchParams.set('priority', priorityFilter.trim());
+  }
+
+  // Add server-side sorting params if provided
+  if (sortField && sortField.trim()) {
+    searchParams.set('sortField', sortField.trim());
+  }
+  
+  if (sortDir) {
+    searchParams.set('sortDir', sortDir);
+  }
+
+  // Include facets (server computes across entire result set)
+  if (includeFacets) {
+    searchParams.set('facets', 'true');
   }
 
   const response = await fetch(`${API_BASE}/issues/search?${searchParams}`, {
