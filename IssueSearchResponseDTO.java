@@ -25,6 +25,13 @@ public class IssueSearchResponseDTO {
     private String searchedAsUserDisplayName;
     private String resolvedJqlQuery; // The JQL after currentUser() is resolved
 
+    /**
+    * Facets computed across the entire result set (used to populate filter dropdowns).
+    *  
+    * Expected keys:
+    *  - "statuses":   List of unique status names
+    *  - "priorities": List of unique priority names
+    */
     private Map<String, List<String>> facets;
 
     public IssueSearchResponseDTO() {
