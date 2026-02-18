@@ -323,14 +323,18 @@ private Map<String, Object> convertIssueSearchResponseToMap(IssueSearchResponseD
 
     // NEW: facets (Option A)
     // Keep a stable object shape even if null (frontend can rely on existence)
-    Map<String, Object> facets = new HashMap<>();
-    facets.put("statuses", dto.getFacetStatuses() != null ? dto.getFacetStatuses() : Collections.emptyList());
-    facets.put("priorities", dto.getFacetPriorities() != null ? dto.getFacetPriorities() : Collections.emptyList());
-    facets.put("truncated", dto.isFacetTruncated());
-    map.put("facets", facets);
-
-    return map;
-}
+    IssueSearchResponseDTO.Facets facets = dto.getFacets();
+    if (facets != null) {
+        Map<String, Object> facetsMap = new HashMap<>();
+        facetsMap.put("statuses", facets.getStatuses());
+        facetsMap.put("priorities", facets.getPriorities());
+        map.put("facets", facetsMap);
+    } else {
+        map.put("facets", null);
+    }
+    
+        return map;
+    }
 
 
     /**
