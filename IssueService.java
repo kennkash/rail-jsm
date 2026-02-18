@@ -34,10 +34,15 @@ import org.slf4j.LoggerFactory;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,6 +58,31 @@ public class IssueService {
     private static final int DEFAULT_PAGE_SIZE = 25;
     private static final int MAX_PAGE_SIZE = 100;
     private static final Pattern PROJECT_KEY_PATTERN = Pattern.compile("project\\s*=\\s*\"?([A-Z0-9_\\-]+)\"?", Pattern.CASE_INSENSITIVE);
+
+    /**
+    * Safety cap for facet scanning (status + priority). We only need unique values,
+    * but scanning an unbounded result set can be expensive.
+    */
+    private static final int MAX_FACET_SCAN_ISSUES = 2000;
+    private static final int FACET_PAGE_SIZE = 500;
+
+    /**
+    * Sort field allow-list to prevent JQL injection.
+    * NOTE: Custom fields are handled separately via customfield_12345 => cf[12345].
+    */
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+        "key",
+        "summary",
+        "status",
+        "priority",
+        "created",
+        "updated",
+        "due",
+        "assignee",
+        "reporter",
+        "issuetype",
+        "resolution"
+    );
 
     private final SearchService searchService;
     private final IssueManager issueManager;
@@ -93,7 +123,7 @@ public class IssueService {
      * @return Search response with paginated results
      */
     public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize) {
-        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null);
+        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null, null, "asc", false);
     }
 
     /**
@@ -110,9 +140,31 @@ public class IssueService {
      */
     public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize,
                                                 String searchTerm, String statusFilter, String priorityFilter) {
+        return searchIssues(jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, null, "asc", false);
+    }
+
+    /**
+    * Search issues using JQL query with optional server-side search/filter, sorting, and facets.
+    *
+    * Sorting here applies to the ENTIRE result set (server-side ORDER BY), not just the current page.
+    * Facets (status + priority) are computed across the ENTIRE result set (bounded by MAX_FACET_SCAN_ISSUES).
+    */
+    public IssueSearchResponseDTO searchIssues(
+        String jqlQuery,
+        int startIndex,
+        int pageSize,
+        String searchTerm,
+        String statusFilter,
+        String priorityFilter,
+        String sortField,
+        String sortDir,
+        boolean includeFacets
+    ) {
         long startTime = System.currentTimeMillis();
-        log.debug("Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}",
-                  jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
+        log.debug(
+            "Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}, sortField: {}, sortDir: {}, facets: {}",
+            jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, sortField, sortDir, includeFacets
+        );
 
         ApplicationUser currentUser = authenticationContext.getLoggedInUser();
         if (currentUser == null) {
@@ -134,6 +186,12 @@ public class IssueService {
 
             // Build enhanced JQL with search/filter terms (server-side filtering)
             String enhancedJql = buildEnhancedJql(jqlQuery, searchTerm, statusFilter, priorityFilter);
+            // Apply server-side ORDER BY (sort applies across entire result set)
+            String normalizedSortField = normalizeSortField(sortField);
+            String normalizedSortDir = normalizeSortDir(sortDir);
+            if (normalizedSortField != null) {
+                enhancedJql = applyOrderBy(enhancedJql, normalizedSortField, normalizedSortDir);
+            }
             log.debug("Enhanced JQL: {}", enhancedJql);
 
             // Parse and validate the enhanced JQL query
@@ -219,6 +277,21 @@ public class IssueService {
             response.setSearchedAsUserDisplayName(currentUser.getDisplayName());
             response.setResolvedJqlQuery(resolvedJql);
 
+            // Facets (status + priority) for filter dropdowns across ENTIRE result set.
+            if (includeFacets) {
+                try {
+                    // IMPORTANT: facets should reflect the full result set for the base query + searchTerm,
+                    // but NOT be constrained by the user's current status/priority selections.
+                    String facetsJql = buildEnhancedJql(jqlQuery, searchTerm, null, null);
+                    Map<String, List<String>> facets = computeFacets(currentUser, facetsJql);
+                    response.setFacets(facets);
+                } catch (Exception facetEx) {
+                    // Never fail the request due to facet computation.
+                    log.warn("Facet computation failed; continuing without facets. jql='{}' user='{}' msg='{}'",
+                             jqlQuery, currentUser.getKey(), facetEx.getMessage());
+                }
+            }
+
             log.debug("Issue search completed: {} results out of {} total ({}ms) - searched as user: {} ({})",
                     issueDTOs.size(), total, response.getExecutionTimeMs(),
                     currentUser.getDisplayName(), currentUser.getKey());
@@ -249,6 +322,126 @@ public class IssueService {
             throw new RuntimeException("Issue search failed: " + e.getMessage(), e);
         }
     }
+
+    private String normalizeSortDir(String sortDir) {
+        if (sortDir == null) {
+            return "asc";
+        }
+        String dir = sortDir.trim().toLowerCase();
+        return "desc".equals(dir) ? "desc" : "asc";
+    }
+
+    /**
+    * Normalize sort field into a safe JQL field reference.
+    *
+    * Supported:
+    *  - system fields in ALLOWED_SORT_FIELDS
+    *  - customfield_12345 => cf[12345]
+    */
+    private String normalizeSortField(String sortField) {
+        if (sortField == null) {
+            return null;
+        }
+        String raw = sortField.trim();
+        if (raw.isEmpty()) {
+            return null;
+        }
+
+        // customfield_12345 => cf[12345]
+        Matcher m = Pattern.compile("^customfield_(\\d+)$", Pattern.CASE_INSENSITIVE).matcher(raw);
+        if (m.matches()) {
+            return "cf[" + m.group(1) + "]";
+        }
+
+        String normalized = raw.toLowerCase();
+        if (ALLOWED_SORT_FIELDS.contains(normalized)) {
+            return normalized;
+        }
+
+        // Reject anything else (avoid JQL injection)
+        log.debug("Ignoring unsupported sortField '{}' (not allow-listed)", sortField);
+        return null;
+    }
+
+    
+    /**
+    * Strip any existing ORDER BY clause and apply a new ORDER BY.
+    */
+    private String applyOrderBy(String baseJql, String sortField, String sortDir) {
+        if (baseJql == null) {
+            baseJql = "";
+        }
+
+        String trimmed = baseJql.trim();
+        int orderByIndex = trimmed.toUpperCase().lastIndexOf("ORDER BY");
+        String withoutOrder = orderByIndex > 0 ? trimmed.substring(0, orderByIndex).trim() : trimmed;
+        
+        if (withoutOrder.isEmpty()) {
+            return "ORDER BY " + sortField + " " + sortDir;
+        }
+        return withoutOrder + " ORDER BY " + sortField + " " + sortDir;
+    }
+
+    /**
+    * Compute facets (unique statuses + priorities) across the ENTIRE result set.
+    *
+    * NOTE: bounded by MAX_FACET_SCAN_ISSUES to keep this safe in large instances.
+    */
+    private Map<String, List<String>> computeFacets(ApplicationUser user, String facetsJql) throws SearchException {
+        // Parse and validate facets JQL
+        SearchService.ParseResult parseResult = searchService.parseQuery(user, facetsJql);
+        if (!parseResult.isValid()) {
+            throw new IllegalArgumentException("Invalid JQL query for facets: " + parseResult.getErrors());
+        }
+        
+        Query query = parseResult.getQuery();
+
+        TreeSet<String> statuses = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        TreeSet<String> priorities = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+
+        int startAt = 0;
+        int scanned = 0;
+    while (scanned < MAX_FACET_SCAN_ISSUES) {
+        int pageSize = Math.min(FACET_PAGE_SIZE, MAX_FACET_SCAN_ISSUES - scanned);
+        PagerFilter pager = new PagerFilter(startAt, pageSize);
+        SearchResults results = searchService.search(user, query, pager);
+        Collection<Issue> issues = results.getResults();
+        if (issues == null || issues.isEmpty()) {
+            break;
+        }
+
+        for (Issue issue : issues) {
+            if (issue == null) continue;
+            if (issue.getStatus() != null && issue.getStatus().getName() != null) {
+                statuses.add(issue.getStatus().getName());
+            }
+            Priority pr = issue.getPriority();
+            if (pr != null && pr.getName() != null) {
+                priorities.add(pr.getName());
+            }
+        }
+
+        int fetched = issues.size();
+        scanned += fetched;
+        startAt += fetched;
+        
+        // Stop if we've scanned the full result set.
+        if (startAt >= results.getTotal()) {
+            break;
+        }
+        
+        // Stop if pager returned fewer than requested (no more pages).
+        if (fetched < pageSize) {
+            break;
+        }
+    }
+
+    Map<String, List<String>> facets = new HashMap<>();
+    facets.put("statuses", new ArrayList<>(statuses));
+    facets.put("priorities", new ArrayList<>(priorities));
+    return facets;
+}
+
 
     /**
      * Search issues for a specific project with current user filter
