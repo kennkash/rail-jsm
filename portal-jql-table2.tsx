@@ -1,5 +1,5 @@
               ) : (
-                sortedIssues.map((issue) => (
+                displayIssues.map((issue) => (
                   <TableRow key={issue.key} className="hover:bg-muted transition-colors">
                     {columns.map((column) => (
                       <TableCell key={column.id}>
