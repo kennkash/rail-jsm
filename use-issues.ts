@@ -36,6 +36,12 @@ export function useJQLSearch(jqlQuery: string | null, options?: {
   statusFilter?: string;
   /** Server-side priority filter (comma-separated priority names) */
   priorityFilter?: string;
+  /** Server-side sort field (applies to the ENTIRE result set) */
+  sortField?: string;
+  /** Server-side sort direction (asc|desc) */
+  sortDir?: 'asc' | 'desc';
+  /** Include facets (status + priority) computed across the ENTIRE result set */
+  includeFacets?: boolean;
 }) {
   const {
     startIndex = 0,
@@ -44,6 +50,9 @@ export function useJQLSearch(jqlQuery: string | null, options?: {
     searchTerm,
     statusFilter,
     priorityFilter,
+    sortField,
+    sortDir,
+    includeFacets,
   } = options || {};
 
   return useIssues(
@@ -54,6 +63,9 @@ export function useJQLSearch(jqlQuery: string | null, options?: {
       searchTerm,
       statusFilter,
       priorityFilter,
+      sortField,
+      sortDir,
+      includeFacets,
     },
     enabled && !!jqlQuery
   );
@@ -74,7 +86,7 @@ export function useProjectIssues(projectKey: string | null, options?: {
     pageSize = 25, 
     filter, 
     includeAllProjectIssues = false, 
-    enabled = true 
+    enabled = true
   } = options || {};
   
   return useIssues(
