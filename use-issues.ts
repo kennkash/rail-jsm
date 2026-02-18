@@ -1,25 +1,32 @@
-// rail-at-sas/frontend/hooks/use-issues.ts
+/* rail-at-sas/frontend/hooks/use-issues.ts  */
 
-import { useQuery } from '@tanstack/react-query';
-import {
-  searchIssues,
-  fetchIssueFacets,
-  IssueSearchParams,
-  IssueSearchResponse,
-  IssueFacetResponse,
-} from '@/lib/api/issues-client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchIssues, IssueSearchParams, IssueSearchResponse } from '@/lib/api/issues-client';
 
-export function useJQLSearch(
-  jqlQuery: string | null,
-  options?: {
-    startIndex?: number;
-    pageSize?: number;
-    enabled?: boolean;
-    searchTerm?: string;
-    statusFilter?: string;
-    priorityFilter?: string;
-  }
-) {
+export function useIssues(params: IssueSearchParams, enabled: boolean = true) {
+  return useQuery<IssueSearchResponse, Error>({
+    queryKey: ['issues', params],
+    queryFn: () => fetchIssues(params),
+    enabled: enabled && (!!params.jqlQuery || !!params.projectKey),
+    staleTime: 2 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error.message.includes('Access denied') || error.message.includes('Forbidden')) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+  });
+}
+
+export function useJQLSearch(jqlQuery: string | null, options?: {
+  startIndex?: number;
+  pageSize?: number;
+  enabled?: boolean;
+  searchTerm?: string;
+  statusFilter?: string;
+  priorityFilter?: string;
+}) {
   const {
     startIndex = 0,
     pageSize = 25,
@@ -29,38 +36,83 @@ export function useJQLSearch(
     priorityFilter,
   } = options || {};
 
-  return useQuery<IssueSearchResponse>({
-    queryKey: [
-      'issues',
-      jqlQuery,
+  return useIssues(
+    {
+      jqlQuery: jqlQuery || undefined,
       startIndex,
       pageSize,
       searchTerm,
       statusFilter,
       priorityFilter,
-    ],
-    queryFn: () =>
-      searchIssues({
-        jqlQuery: jqlQuery || undefined,
-        startIndex,
-        pageSize,
-        searchTerm,
-        statusFilter,
-        priorityFilter,
-      }),
-    enabled: enabled && !!jqlQuery,
-    staleTime: 2 * 60 * 1000,
-  });
+    },
+    enabled && !!jqlQuery
+  );
 }
 
-/**
- * NEW: Hook for fetching ALL possible statuses + priorities
- */
-export function useIssueFacets(jqlQuery: string | null) {
-  return useQuery<IssueFacetResponse>({
-    queryKey: ['issue-facets', jqlQuery],
-    queryFn: () => fetchIssueFacets(jqlQuery!),
-    enabled: !!jqlQuery,
-    staleTime: 5 * 60 * 1000,
-  });
+export function useProjectIssues(projectKey: string | null, options?: {
+  startIndex?: number;
+  pageSize?: number;
+  filter?: string;
+  includeAllProjectIssues?: boolean;
+  enabled?: boolean;
+}) {
+  const {
+    startIndex = 0,
+    pageSize = 25,
+    filter,
+    includeAllProjectIssues = false,
+    enabled = true
+  } = options || {};
+
+  return useIssues(
+    {
+      projectKey: projectKey || undefined,
+      startIndex,
+      pageSize,
+      filter,
+      includeAllProjectIssues,
+    },
+    enabled && !!projectKey
+  );
+}
+
+export function usePrefetchIssuesNextPage() {
+  const queryClient = useQueryClient();
+
+  return (params: IssueSearchParams) => {
+    const nextPageParams = {
+      ...params,
+      startIndex: (params.startIndex || 0) + (params.pageSize || 25),
+    };
+
+    queryClient.prefetchQuery({
+      queryKey: ['issues', nextPageParams],
+      queryFn: () => fetchIssues(nextPageParams),
+      staleTime: 2 * 60 * 1000,
+    });
+  };
+}
+
+export function useInvalidateIssues() {
+  const queryClient = useQueryClient();
+
+  return {
+    invalidateAll: () => queryClient.invalidateQueries({ queryKey: ['issues'] }),
+    invalidateProject: (projectKey: string) =>
+      queryClient.invalidateQueries({
+        queryKey: ['issues'],
+        predicate: (query) => {
+          const params = query.queryKey[1] as IssueSearchParams;
+          return params?.projectKey === projectKey;
+        }
+      }),
+    invalidateJQL: (jqlQuery: string) =>
+      queryClient.invalidateQueries({
+        queryKey: ['issues'],
+        predicate: (query) => {
+          const params = query.queryKey[1] as IssueSearchParams;
+          return params?.jqlQuery === jqlQuery;
+        }
+      }),
+  };
 }
