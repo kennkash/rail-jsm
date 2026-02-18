@@ -1,4 +1,3 @@
-/* rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/dto/IssueSearchResponseDTO.java */
 package com.samsungbuilder.jsm.dto;
 
 import java.util.List;
@@ -24,10 +23,26 @@ public class IssueSearchResponseDTO {
     private String searchedAsUserDisplayName;
     private String resolvedJqlQuery; // The JQL after currentUser() is resolved
 
-    // NEW: facets for server-side filter dropdowns (computed across full result set)
-    private List<String> facetStatuses;
-    private List<String> facetPriorities;
-    private boolean facetTruncated;
+    // ✅ NEW: Facets for filters (computed across the FULL result set, not just current page)
+    private Facets facets;
+
+    public static class Facets {
+        private List<String> statuses;
+        private List<String> priorities;
+
+        public Facets() {}
+
+        public Facets(List<String> statuses, List<String> priorities) {
+            this.statuses = statuses;
+            this.priorities = priorities;
+        }
+
+        public List<String> getStatuses() { return statuses; }
+        public void setStatuses(List<String> statuses) { this.statuses = statuses; }
+
+        public List<String> getPriorities() { return priorities; }
+        public void setPriorities(List<String> priorities) { this.priorities = priorities; }
+    }
 
     public IssueSearchResponseDTO() {
     }
@@ -81,15 +96,8 @@ public class IssueSearchResponseDTO {
     public String getResolvedJqlQuery() { return resolvedJqlQuery; }
     public void setResolvedJqlQuery(String resolvedJqlQuery) { this.resolvedJqlQuery = resolvedJqlQuery; }
 
-    // NEW: facets
-    public List<String> getFacetStatuses() { return facetStatuses; }
-    public void setFacetStatuses(List<String> facetStatuses) { this.facetStatuses = facetStatuses; }
-
-    public List<String> getFacetPriorities() { return facetPriorities; }
-    public void setFacetPriorities(List<String> facetPriorities) { this.facetPriorities = facetPriorities; }
-
-    public boolean isFacetTruncated() { return facetTruncated; }
-    public void setFacetTruncated(boolean facetTruncated) { this.facetTruncated = facetTruncated; }
+    public Facets getFacets() { return facets; }
+    public void setFacets(Facets facets) { this.facets = facets; }
 
     public int getCurrentPage() {
         return pageSize > 0 ? (startIndex / pageSize) + 1 : 1;
