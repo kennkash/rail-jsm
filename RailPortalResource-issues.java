@@ -290,41 +290,48 @@ public class RailPortalResource {
         }
     }
 
-    /**
-     * Convert IssueSearchResponseDTO to Map to bypass JAX-RS Jackson serialization issues.
-     */
-    private Map<String, Object> convertIssueSearchResponseToMap(IssueSearchResponseDTO dto) {
-        Map<String, Object> map = new HashMap<>();
+   /**
+ * Convert IssueSearchResponseDTO to Map to bypass JAX-RS Jackson serialization issues.
+ * Mirrors the PortalConfigDTO workaround so the frontend always receives a stable JSON shape.
+ */
+private Map<String, Object> convertIssueSearchResponseToMap(IssueSearchResponseDTO dto) {
+    Map<String, Object> map = new HashMap<>();
 
-        List<Map<String, Object>> issueMaps = dto.getIssues() != null
-                ? dto.getIssues().stream()
-                .map(this::convertIssueDtoToMap)
-                .collect(Collectors.toList())
-                : Collections.emptyList();
+    List<Map<String, Object>> issueMaps = dto.getIssues() != null
+            ? dto.getIssues().stream()
+                    .map(this::convertIssueDtoToMap)
+                    .collect(Collectors.toList())
+            : Collections.emptyList();
 
-        map.put("issues", issueMaps);
-        map.put("totalCount", dto.getTotalCount());
-        map.put("startIndex", dto.getStartIndex());
-        map.put("pageSize", dto.getPageSize());
-        map.put("hasNextPage", dto.isHasNextPage());
-        map.put("hasPreviousPage", dto.isHasPreviousPage());
-        map.put("jqlQuery", dto.getJqlQuery());
-        map.put("projectKey", dto.getProjectKey());
-        map.put("executionTimeMs", dto.getExecutionTimeMs());
-        map.put("currentPage", dto.getCurrentPage());
-        map.put("totalPages", dto.getTotalPages());
+    map.put("issues", issueMaps);
+    map.put("totalCount", dto.getTotalCount());
+    map.put("startIndex", dto.getStartIndex());
+    map.put("pageSize", dto.getPageSize());
+    map.put("hasNextPage", dto.isHasNextPage());
+    map.put("hasPreviousPage", dto.isHasPreviousPage());
+    map.put("jqlQuery", dto.getJqlQuery());
+    map.put("projectKey", dto.getProjectKey());
+    map.put("executionTimeMs", dto.getExecutionTimeMs());
+    map.put("currentPage", dto.getCurrentPage());
+    map.put("totalPages", dto.getTotalPages());
 
-        // User context for debugging permission issues
-        map.put("searchedAsUserKey", dto.getSearchedAsUserKey());
-        map.put("searchedAsUserName", dto.getSearchedAsUserName());
-        map.put("searchedAsUserDisplayName", dto.getSearchedAsUserDisplayName());
-        map.put("resolvedJqlQuery", dto.getResolvedJqlQuery());
+    // User context for debugging permission issues
+    map.put("searchedAsUserKey", dto.getSearchedAsUserKey());
+    map.put("searchedAsUserName", dto.getSearchedAsUserName());
+    map.put("searchedAsUserDisplayName", dto.getSearchedAsUserDisplayName());
+    map.put("resolvedJqlQuery", dto.getResolvedJqlQuery());
 
-        // NEW: facets for filter dropdowns
-        map.put("facets", dto.getFacets());
+    // NEW: facets (Option A)
+    // Keep a stable object shape even if null (frontend can rely on existence)
+    Map<String, Object> facets = new HashMap<>();
+    facets.put("statuses", dto.getFacetStatuses() != null ? dto.getFacetStatuses() : Collections.emptyList());
+    facets.put("priorities", dto.getFacetPriorities() != null ? dto.getFacetPriorities() : Collections.emptyList());
+    facets.put("truncated", dto.isFacetTruncated());
+    map.put("facets", facets);
 
-        return map;
-    }
+    return map;
+}
+
 
     /**
      * Convert IssueDTO to Map for safe JSON serialization.
