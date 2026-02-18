@@ -34,10 +34,16 @@ import org.slf4j.LoggerFactory;
 import javax.inject.Inject;
 import javax.inject.Named;
 import java.net.URI;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Service for searching and retrieving Jira Issues
@@ -49,7 +55,17 @@ public class IssueService {
     private static final Logger log = LoggerFactory.getLogger(IssueService.class);
     private static final int DEFAULT_PAGE_SIZE = 25;
     private static final int MAX_PAGE_SIZE = 100;
-    private static final Pattern PROJECT_KEY_PATTERN = Pattern.compile("project\\s*=\\s*\"?([A-Z0-9_\\-]+)\"?", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Facets can be expensive if result sets are huge; this caps the number of issues scanned
+     * when computing distinct status/priority lists.
+     *
+     * If you want "always exact facets", set this very high, but beware performance.
+     */
+    private static final int MAX_FACET_SCAN_ISSUES = 5000;
+
+    private static final Pattern PROJECT_KEY_PATTERN =
+            Pattern.compile("project\\s*=\\s*\"?([A-Z0-9_\\-]+)\"?", Pattern.CASE_INSENSITIVE);
 
     private final SearchService searchService;
     private final IssueManager issueManager;
@@ -85,23 +101,13 @@ public class IssueService {
      * Search issues using JQL query (backward compatible - no server-side search/filter)
      */
     public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize) {
-        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null, null, null, false);
+        return searchIssues(jqlQuery, startIndex, pageSize, null, null, null);
     }
 
     /**
      * Search issues using JQL query with optional server-side search/filter.
-     * Backward compatible signature (no sort/facets).
-     */
-    public IssueSearchResponseDTO searchIssues(String jqlQuery, int startIndex, int pageSize,
-                                              String searchTerm, String statusFilter, String priorityFilter) {
-        return searchIssues(jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, null, null, false);
-    }
-
-    /**
-     * Search issues using JQL query with:
-     * - optional server-side search/filter (across ENTIRE result set)
-     * - optional server-side sorting (ORDER BY <field> ASC|DESC)
-     * - optional facets for UI filters (distinct statuses/priorities across ENTIRE result set)
+     * Also computes facets (distinct status/priority values across the entire result set)
+     * so the UI can present complete filter options even when results are paged.
      */
     public IssueSearchResponseDTO searchIssues(
             String jqlQuery,
@@ -109,14 +115,11 @@ public class IssueService {
             int pageSize,
             String searchTerm,
             String statusFilter,
-            String priorityFilter,
-            String sortField,
-            String sortDir,
-            boolean includeFacets
+            String priorityFilter
     ) {
         long startTime = System.currentTimeMillis();
-        log.debug("Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}, sortField: {}, sortDir: {}, facets: {}",
-                jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter, sortField, sortDir, includeFacets);
+        log.debug("Searching issues with JQL: {}, startIndex: {}, pageSize: {}, search: {}, status: {}, priority: {}",
+                jqlQuery, startIndex, pageSize, searchTerm, statusFilter, priorityFilter);
 
         ApplicationUser currentUser = authenticationContext.getLoggedInUser();
         if (currentUser == null) {
@@ -135,32 +138,49 @@ public class IssueService {
             int validatedPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
             int validatedStartIndex = Math.max(startIndex, 0);
 
-            // Build enhanced JQL: base + search/filter + ORDER BY override (if provided)
-            String enhancedJql = buildEnhancedJql(jqlQuery, searchTerm, statusFilter, priorityFilter, sortField, sortDir);
-            log.debug("Enhanced JQL: {}", enhancedJql);
+            // This is the query used for the RESULT ROWS (includes status/priority filter)
+            String enhancedJqlForResults = buildEnhancedJql(jqlQuery, searchTerm, statusFilter, priorityFilter);
+            log.debug("Enhanced JQL (results): {}", enhancedJqlForResults);
 
-            SearchService.ParseResult parseResult = searchService.parseQuery(currentUser, enhancedJql);
+            SearchService.ParseResult parseResult = searchService.parseQuery(currentUser, enhancedJqlForResults);
             if (!parseResult.isValid()) {
-                log.warn("Invalid JQL query: {} - Errors: {}", enhancedJql, parseResult.getErrors());
+                log.warn("Invalid JQL query: {} - Errors: {}", enhancedJqlForResults, parseResult.getErrors());
                 throw new IllegalArgumentException("Invalid JQL query: " + parseResult.getErrors());
             }
 
-            Query query = parseResult.getQuery();
+            Query queryForResults = parseResult.getQuery();
             PagerFilter pagerFilter = new PagerFilter(validatedStartIndex, validatedPageSize);
 
-            // Resolved JQL (with currentUser() resolved)
-            resolvedJql = query.getQueryString();
+            resolvedJql = queryForResults.getQueryString();
 
-            // Determine project key for fallback logic
+            // ---- FACETS ----
+            // Compute facets from "base query + searchTerm" ONLY (exclude status/priority filters),
+            // so the filter picker includes values that exist anywhere in the full result set.
+            Facets facets = null;
+            try {
+                String enhancedJqlForFacets = buildEnhancedJql(jqlQuery, searchTerm, null, null);
+                SearchService.ParseResult facetsParse = searchService.parseQuery(currentUser, enhancedJqlForFacets);
+                if (facetsParse.isValid()) {
+                    facets = computeFacets(currentUser, facetsParse.getQuery(), MAX_FACET_SCAN_ISSUES);
+                } else {
+                    log.debug("Facet JQL invalid; skipping facets. JQL={}, errors={}",
+                            enhancedJqlForFacets, facetsParse.getErrors());
+                }
+            } catch (Exception facetEx) {
+                // Facets should never fail the whole request.
+                log.warn("Facet computation failed; continuing without facets. jql={}", jqlQuery, facetEx);
+            }
+            // ----------------
+
+            // Project key extraction / fallback
             projectKeyFromJql = extractProjectKeyFromJql(jqlQuery);
             if (projectKeyFromJql == null) {
                 projectKeyFromJql = extractProjectKeyFromJql(resolvedJql);
             }
-
-            // If user cannot browse project, fall back to service desk customer requests
             if (shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
                 log.debug("Using Service Desk customer request fallback for user {} in project {}",
                         currentUser.getKey(), projectKeyFromJql);
+
                 IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
                         projectKeyFromJql,
                         validatedStartIndex,
@@ -171,14 +191,14 @@ public class IssueService {
                         startTime
                 );
                 if (fallbackResponse != null) {
-                    // NOTE: facets/sort are not supported in the service desk fallback path here.
-                    // If you need facets there too, we can add a separate paging aggregator using customerRequestService.
+                    // Attach facets even to fallback when available
+                    attachFacetsToResponseIfSupported(fallbackResponse, facets);
                     return fallbackResponse;
                 }
             }
 
-            // Execute search (paged)
-            SearchResults searchResults = searchService.search(currentUser, query, pagerFilter);
+            // Execute paged search for rows
+            SearchResults searchResults = searchService.search(currentUser, queryForResults, pagerFilter);
             Collection<Issue> issues = searchResults.getResults();
 
             List<IssueDTO> issueDTOs = issues.stream()
@@ -187,8 +207,11 @@ public class IssueService {
 
             int total = searchResults.getTotal();
 
-            // If no results and fallback should apply, try it
+            // If zero results and service desk fallback is applicable, try it
             if (total == 0 && projectKeyFromJql != null && shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
+                log.debug("Zero results from JQL search; attempting service desk fallback for user {} project {}",
+                        currentUser.getKey(), projectKeyFromJql);
+
                 IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
                         projectKeyFromJql,
                         validatedStartIndex,
@@ -199,8 +222,14 @@ public class IssueService {
                         startTime
                 );
                 if (fallbackResponse != null) {
+                    attachFacetsToResponseIfSupported(fallbackResponse, facets);
                     return fallbackResponse;
                 }
+            }
+
+            if (total == 0) {
+                log.info("Issue search returned no results for JQL '{}' (user: {}, resolvedJql: {}, startIndex: {}, pageSize: {})",
+                        jqlQuery, currentUser.getKey(), resolvedJql, validatedStartIndex, validatedPageSize);
             }
 
             IssueSearchResponseDTO response = new IssueSearchResponseDTO(
@@ -211,20 +240,42 @@ public class IssueService {
             );
             response.setJqlQuery(jqlQuery);
             response.setExecutionTimeMs(System.currentTimeMillis() - startTime);
+
             response.setSearchedAsUserKey(currentUser.getKey());
             response.setSearchedAsUserName(currentUser.getUsername());
             response.setSearchedAsUserDisplayName(currentUser.getDisplayName());
             response.setResolvedJqlQuery(resolvedJql);
 
-            // NEW: facets (distinct statuses/priorities across ENTIRE result set)
-            if (includeFacets) {
-                response.setFacets(computeFacetsPaged(currentUser, query));
-            }
+            // Attach facets to response (requires DTO support)
+            attachFacetsToResponseIfSupported(response, facets);
+
+            log.debug("Issue search completed: {} results out of {} total ({}ms) - searched as user: {} ({})",
+                    issueDTOs.size(), total, response.getExecutionTimeMs(),
+                    currentUser.getDisplayName(), currentUser.getKey());
 
             return response;
 
         } catch (SearchException e) {
             log.error("Error executing issue search with JQL: {}", jqlQuery, e);
+
+            if (projectKeyFromJql != null && shouldUseCustomerRequestFallback(currentUser, projectKeyFromJql)) {
+                int validatedPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
+                int validatedStartIndex = Math.max(startIndex, 0);
+
+                IssueSearchResponseDTO fallbackResponse = searchCustomerRequestsForProject(
+                        projectKeyFromJql,
+                        validatedStartIndex,
+                        validatedPageSize,
+                        currentUser,
+                        jqlQuery,
+                        resolvedJql,
+                        startTime
+                );
+                if (fallbackResponse != null) {
+                    return fallbackResponse;
+                }
+            }
+
             throw new RuntimeException("Issue search failed: " + e.getMessage(), e);
         } catch (Exception e) {
             log.error("Unexpected error during issue search", e);
@@ -232,9 +283,6 @@ public class IssueService {
         }
     }
 
-    /**
-     * Search issues for a specific project with current user filter
-     */
     public IssueSearchResponseDTO searchProjectIssues(String projectKey, int startIndex, int pageSize) {
         String jql = String.format("project = %s AND reporter = currentUser() ORDER BY created DESC", projectKey);
         IssueSearchResponseDTO response = searchIssues(jql, startIndex, pageSize);
@@ -242,9 +290,6 @@ public class IssueService {
         return response;
     }
 
-    /**
-     * Search issues for a specific project (all issues user can see)
-     */
     public IssueSearchResponseDTO searchAllProjectIssues(String projectKey, int startIndex, int pageSize) {
         String jql = String.format("project = %s ORDER BY created DESC", projectKey);
         IssueSearchResponseDTO response = searchIssues(jql, startIndex, pageSize);
@@ -252,9 +297,6 @@ public class IssueService {
         return response;
     }
 
-    /**
-     * Get issues by project with custom JQL filter
-     */
     public IssueSearchResponseDTO searchProjectIssuesWithFilter(String projectKey, String additionalFilter, int startIndex, int pageSize) {
         String baseJql = String.format("project = %s", projectKey);
         String jql = additionalFilter != null && !additionalFilter.trim().isEmpty()
@@ -266,10 +308,6 @@ public class IssueService {
         return response;
     }
 
-    /**
-     * Fallback search for service desk customers without Browse permission.
-     * Uses the Service Desk customer request API to return only requests the user can see.
-     */
     private IssueSearchResponseDTO searchCustomerRequestsForProject(
             String projectKey,
             int startIndex,
@@ -292,7 +330,8 @@ public class IssueService {
         try {
             serviceDesk = serviceDeskManager.getServiceDeskForProject(project);
         } catch (Exception e) {
-            log.debug("Could not resolve service desk for project {} as user {}: {}", projectKey, currentUser.getKey(), e.getMessage());
+            log.debug("Could not resolve service desk for project {} as user {}: {}",
+                    projectKey, currentUser.getKey(), e.getMessage());
         }
 
         int validatedPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
@@ -308,6 +347,7 @@ public class IssueService {
             }
 
             CustomerRequestQuery query = builder.build();
+
             PagedResponse<CustomerRequest> response = customerRequestService.getCustomerRequests(currentUser, query);
 
             List<IssueDTO> issueDTOs = response.getResults().stream()
@@ -334,6 +374,9 @@ public class IssueService {
             dto.setSearchedAsUserName(currentUser.getUsername());
             dto.setSearchedAsUserDisplayName(currentUser.getDisplayName());
 
+            log.debug("Service desk fallback returned {} requests (hasNextPage: {}) for user {} in project {}",
+                    issueDTOs.size(), response.hasNextPage(), currentUser.getKey(), projectKey);
+
             return dto;
         } catch (Exception ex) {
             log.warn("Service desk fallback failed for project {}: {}", projectKey, ex.getMessage());
@@ -341,9 +384,6 @@ public class IssueService {
         }
     }
 
-    /**
-     * Determine whether the caller lacks Browse permission but can be served via service desk APIs.
-     */
     private boolean shouldUseCustomerRequestFallback(ApplicationUser user, String projectKey) {
         if (user == null || projectKey == null || permissionManager == null) {
             return false;
@@ -365,7 +405,8 @@ public class IssueService {
         try {
             return permissionManager != null && permissionManager.hasPermission(ProjectPermissions.BROWSE_PROJECTS, project, user);
         } catch (Exception e) {
-            log.debug("Unable to evaluate browse permission for project {}: {}", project != null ? project.getKey() : "null", e.getMessage());
+            log.debug("Unable to evaluate browse permission for project {}: {}",
+                    project != null ? project.getKey() : "null", e.getMessage());
             return false;
         }
     }
@@ -374,7 +415,8 @@ public class IssueService {
         try {
             return serviceDeskManager != null && serviceDeskManager.getServiceDeskForProject(project) != null;
         } catch (Exception e) {
-            log.debug("Unable to determine if project {} is service desk: {}", project != null ? project.getKey() : "null", e.getMessage());
+            log.debug("Unable to determine if project {} is service desk: {}",
+                    project != null ? project.getKey() : "null", e.getMessage());
             return false;
         }
     }
@@ -391,29 +433,20 @@ public class IssueService {
     }
 
     /**
-     * Build enhanced JQL by appending search and filter clauses,
-     * and optionally overriding ORDER BY for server-side sorting.
+     * Build enhanced JQL by appending search and filter clauses.
      */
-    private String buildEnhancedJql(
-            String baseJql,
-            String searchTerm,
-            String statusFilter,
-            String priorityFilter,
-            String sortField,
-            String sortDir
-    ) {
+    private String buildEnhancedJql(String baseJql, String searchTerm, String statusFilter, String priorityFilter) {
         if (baseJql == null || baseJql.trim().isEmpty()) {
             baseJql = "";
         }
 
         StringBuilder enhancedJql = new StringBuilder();
 
-        // Extract ORDER BY clause if present
-        String baseOrderByClause = "";
+        String orderByClause = "";
         String jqlWithoutOrder = baseJql;
         int orderByIndex = baseJql.toUpperCase().lastIndexOf("ORDER BY");
         if (orderByIndex > 0) {
-            baseOrderByClause = baseJql.substring(orderByIndex).trim();
+            orderByClause = baseJql.substring(orderByIndex);
             jqlWithoutOrder = baseJql.substring(0, orderByIndex).trim();
         }
 
@@ -421,7 +454,6 @@ public class IssueService {
             enhancedJql.append("(").append(jqlWithoutOrder).append(")");
         }
 
-        // Text search clause
         if (searchTerm != null && !searchTerm.trim().isEmpty()) {
             String trimmedSearch = searchTerm.trim();
             String sanitizedSearch = sanitizeJqlValue(trimmedSearch);
@@ -441,7 +473,6 @@ public class IssueService {
             }
         }
 
-        // Status filter clause
         if (statusFilter != null && !statusFilter.trim().isEmpty()) {
             String[] statuses = statusFilter.split(",");
             if (statuses.length > 0) {
@@ -457,7 +488,6 @@ public class IssueService {
             }
         }
 
-        // Priority filter clause
         if (priorityFilter != null && !priorityFilter.trim().isEmpty()) {
             String[] priorities = priorityFilter.split(",");
             if (priorities.length > 0) {
@@ -473,60 +503,14 @@ public class IssueService {
             }
         }
 
-        // ORDER BY: prefer UI override if provided, else keep base ORDER BY
-        String uiOrderByClause = buildOrderByClause(sortField, sortDir);
-        if (!uiOrderByClause.isEmpty()) {
-            enhancedJql.append(" ").append(uiOrderByClause);
-        } else if (!baseOrderByClause.isEmpty()) {
-            enhancedJql.append(" ").append(baseOrderByClause);
+        if (!orderByClause.isEmpty()) {
+            enhancedJql.append(" ").append(orderByClause);
         }
 
         String result = enhancedJql.toString().trim();
         return result.isEmpty() ? baseJql : result;
     }
 
-    /**
-     * Whitelist supported ORDER BY fields to prevent JQL injection.
-     * Allows common system fields + customfield_XXXXX.
-     */
-    private String buildOrderByClause(String sortField, String sortDir) {
-        if (sortField == null || sortField.trim().isEmpty()) {
-            return "";
-        }
-
-        String dir = "ASC";
-        if ("desc".equalsIgnoreCase(sortDir)) {
-            dir = "DESC";
-        }
-
-        String field;
-        switch (sortField) {
-            case "key": field = "key"; break;
-            case "summary": field = "summary"; break;
-            case "status": field = "status"; break;
-            case "priority": field = "priority"; break;
-            case "issueType": field = "issuetype"; break;
-            case "created": field = "created"; break;
-            case "updated": field = "updated"; break;
-            case "dueDate": field = "duedate"; break;
-            case "reporter": field = "reporter"; break;
-            case "assignee": field = "assignee"; break;
-            case "resolution": field = "resolution"; break;
-            default:
-                // Optional: allow sorting by customfield_12345
-                if (sortField.startsWith("customfield_") && sortField.matches("^customfield_\\d+$")) {
-                    field = sortField;
-                } else {
-                    return "";
-                }
-        }
-
-        return "ORDER BY " + field + " " + dir;
-    }
-
-    /**
-     * Sanitize a value for safe use in JQL queries.
-     */
     private String sanitizeJqlValue(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\")
@@ -534,28 +518,44 @@ public class IssueService {
                 .replace("'", "\\'");
     }
 
+    private int estimateTotalCount(int startIndex, int resultSize, boolean hasNextPage, int pageSize) {
+        int base = Math.max(startIndex, 0) + Math.max(resultSize, 0);
+        if (hasNextPage) {
+            return base + Math.max(pageSize, resultSize);
+        }
+        return base;
+    }
+
     /**
-     * Compute facets across ENTIRE result set by paging internally and aggregating distinct values.
-     * NOTE: This does NOT return all issues; it only collects distinct status/priority values.
+     * ===== FACETS SUPPORT =====
+     * Computes distinct status/priority values across the ENTIRE query result set
+     * (bounded by MAX_FACET_SCAN_ISSUES to protect DC performance).
      */
-    private Map<String, List<String>> computeFacetsPaged(ApplicationUser user, Query query) {
-        final int facetPageSize = 500; // tune as needed
+    private static class Facets {
+        private final List<String> statuses;
+        private final List<String> priorities;
+        private final boolean truncated;
+
+        private Facets(List<String> statuses, List<String> priorities, boolean truncated) {
+            this.statuses = statuses;
+            this.priorities = priorities;
+            this.truncated = truncated;
+        }
+    }
+
+    private Facets computeFacets(ApplicationUser user, Query query, int maxScanIssues) throws SearchException {
+        int pageSize = MAX_PAGE_SIZE;
+        int start = 0;
+        int scanned = 0;
 
         Set<String> statuses = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         Set<String> priorities = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
-        int startAt = 0;
-        while (true) {
-            PagerFilter pf = new PagerFilter(startAt, facetPageSize);
-            SearchResults sr;
-            try {
-                sr = searchService.search(user, query, pf);
-            } catch (SearchException e) {
-                log.warn("Facet paging failed: {}", e.getMessage());
-                break;
-            }
+        boolean truncated = false;
 
-            Collection<Issue> issues = sr.getResults();
+        while (true) {
+            SearchResults page = searchService.search(user, query, new PagerFilter(start, pageSize));
+            Collection<Issue> issues = page.getResults();
             if (issues == null || issues.isEmpty()) {
                 break;
             }
@@ -567,26 +567,53 @@ public class IssueService {
                 if (i.getPriority() != null && i.getPriority().getName() != null) {
                     priorities.add(i.getPriority().getName());
                 }
+
+                scanned++;
+                if (scanned >= maxScanIssues) {
+                    truncated = true;
+                    break;
+                }
             }
 
-            startAt += issues.size();
-            if (startAt >= sr.getTotal()) {
+            if (truncated) {
+                break;
+            }
+
+            start += issues.size();
+            if (start >= page.getTotal()) {
                 break;
             }
         }
 
-        Map<String, List<String>> facets = new HashMap<>();
-        facets.put("statuses", new ArrayList<>(statuses));
-        facets.put("priorities", new ArrayList<>(priorities));
-        return facets;
+        return new Facets(new ArrayList<>(statuses), new ArrayList<>(priorities), truncated);
     }
 
-    private int estimateTotalCount(int startIndex, int resultSize, boolean hasNextPage, int pageSize) {
-        int base = Math.max(startIndex, 0) + Math.max(resultSize, 0);
-        if (hasNextPage) {
-            return base + Math.max(pageSize, resultSize);
+    /**
+     * Attaches facets onto IssueSearchResponseDTO **if** your DTO supports them.
+     *
+     * I will replace this with direct setters once you paste IssueSearchResponseDTO.java.
+     */
+    private void attachFacetsToResponseIfSupported(IssueSearchResponseDTO response, Facets facets) {
+        if (response == null || facets == null) return;
+
+        // We can't assume your DTO structure yet; once you paste IssueSearchResponseDTO.java,
+        // I'll switch this to strongly-typed fields and remove reflection.
+        try {
+            // response.setFacetStatuses(...)
+            java.lang.reflect.Method m1 = response.getClass().getMethod("setFacetStatuses", List.class);
+            m1.invoke(response, facets.statuses);
+
+            java.lang.reflect.Method m2 = response.getClass().getMethod("setFacetPriorities", List.class);
+            m2.invoke(response, facets.priorities);
+
+            java.lang.reflect.Method m3 = response.getClass().getMethod("setFacetTruncated", boolean.class);
+            m3.invoke(response, facets.truncated);
+        } catch (NoSuchMethodException e) {
+            // DTO not updated yet; silently ignore
+            log.debug("DTO does not yet support facets setters; skipping attaching facets.");
+        } catch (Exception e) {
+            log.warn("Failed attaching facets to response; continuing without facets.", e);
         }
-        return base;
     }
 
     /**
@@ -704,6 +731,8 @@ public class IssueService {
         dto.setVotes(issue.getVotes() != null ? issue.getVotes().intValue() : null);
         dto.setWatcherCount(issue.getWatches() != null ? issue.getWatches().intValue() : null);
 
+        // NOTE: This section contains reflection elsewhere (extractObjectDisplayValue).
+        // Keeping as-is for now since you already have it, but it's an Upgrade Risk for Jira 10.x.
         try {
             var customFieldManager = com.atlassian.jira.component.ComponentAccessor.getCustomFieldManager();
             if (customFieldManager != null) {
@@ -729,6 +758,11 @@ public class IssueService {
         try {
             if (value == null) {
                 return null;
+            }
+
+            String typeKey = "";
+            if (cf.getCustomFieldType() != null) {
+                typeKey = cf.getCustomFieldType().getKey();
             }
 
             if (value instanceof String) {
