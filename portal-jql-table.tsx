@@ -248,29 +248,31 @@ export function PortalJQLTable(
   const error = shouldUseJQL ? jqlError : projectError;
   const issues = data?.issues || [];
 
-  const availableStatuses = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          issues
-            .map((issue) => issue.status)
-            .filter((status): status is string => Boolean(status)),
-        ),
-      ),
-    [issues],
-  );
+  const availableStatuses = useMemo(() => {
+    const facet = data?.facets?.statuses;
+    if (facet && facet.length > 0) return facet;
 
-  const availablePriorities = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          issues
-            .map((issue) => issue.priority)
-            .filter((priority): priority is string => Boolean(priority)),
-        ),
+    return Array.from(
+      new Set(
+        issues
+          .map((issue) => issue.status)
+          .filter((status): status is string => Boolean(status)),
       ),
-    [issues],
-  );
+    );
+  }, [data?.facets?.statuses, issues]);
+
+  const availablePriorities = useMemo(() => {
+    const facet = data?.facets?.priorities;
+    if (facet && facet.length > 0) return facet;
+
+    return Array.from(
+      new Set(
+        issues
+          .map((issue) => issue.priority)
+          .filter((priority): priority is string => Boolean(priority)),
+      ),
+    );
+  }, [data?.facets?.priorities, issues]);
 
   const hasActiveFilters = statusFilter.length > 0 || priorityFilter.length > 0;
 
