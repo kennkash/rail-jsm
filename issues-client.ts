@@ -67,19 +67,6 @@ export interface ProjectFieldsResponse {
   totalFields: number;
 }
 
-/**
- * Facets returned by backend so the UI can show full filter options
- * even when the issue list is paginated.
- */
-export interface IssueSearchFacets {
-  statuses: string[];
-  priorities: string[];
-  /**
-   * True if backend stopped scanning early due to MAX_FACET_SCAN_ISSUES.
-   * (We can decide later if/how to message this in the UI.)
-   */
-  truncated?: boolean;
-}
 
 export interface IssueSearchResponse {
   issues: Issue[];
@@ -100,7 +87,10 @@ export interface IssueSearchResponse {
   resolvedJqlQuery?: string | null;
 
   // NEW: facets for full filter options
-  facets?: IssueSearchFacets;
+  facets?: {
+    statuses?: string[];
+    priorities?: string[];
+  } | null;
 }
 
 export interface IssueSearchParams {
