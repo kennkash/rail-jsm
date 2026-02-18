@@ -231,7 +231,7 @@ export function PortalJQLTable(
       sortField: sortColumn || undefined,
       sortDir: sortDirection,
       // Include facets so filter dropdowns can show ALL available values
-      includeFacets: shouldUseJQL && showFilter,
+      includeFacets: shouldUseJQL,
     }
   );
 
@@ -256,7 +256,7 @@ export function PortalJQLTable(
   const availableStatuses = useMemo(
     () => {
       // Prefer server facets (full JQL match-set), fallback to current page values
-      const facetStatuses = (data as any)?.facets?.statuses as string[] | undefined;
+      const facetStatuses = data?.facets?.statuses;
       if (Array.isArray(facetStatuses) && facetStatuses.length > 0) {
         return facetStatuses;
       }
@@ -274,7 +274,7 @@ export function PortalJQLTable(
   const availablePriorities = useMemo(
     () => {
       // Prefer server facets (full JQL match-set), fallback to current page values
-      const facetPriorities = (data as any)?.facets?.priorities as string[] | undefined;
+      const facetPriorities = data?.facets?.priorities;
       if (Array.isArray(facetPriorities) && facetPriorities.length > 0) {
         return facetPriorities;
       }
