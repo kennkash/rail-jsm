@@ -227,6 +227,11 @@ export function PortalJQLTable(
       searchTerm: debouncedSearchTerm || undefined,
       statusFilter: serverStatusFilter,
       priorityFilter: serverPriorityFilter,
+      // Server-side sorting (applies to ENTIRE result set)
+      sortField: sortColumn || undefined,
+      sortDir: sortDirection,
+      // Include facets so filter dropdowns can show ALL available values
+      includeFacets: shouldUseJQL && showFilter,
     }
   );
 
@@ -249,27 +254,39 @@ export function PortalJQLTable(
   const issues = data?.issues || [];
 
   const availableStatuses = useMemo(
-    () =>
-      Array.from(
+    () => {
+      // Prefer server facets (full JQL match-set), fallback to current page values
+      const facetStatuses = (data as any)?.facets?.statuses as string[] | undefined;
+      if (Array.isArray(facetStatuses) && facetStatuses.length > 0) {
+        return facetStatuses;
+      }
+      return Array.from(
         new Set(
           issues
             .map((issue) => issue.status)
             .filter((status): status is string => Boolean(status)),
         ),
-      ),
-    [issues],
+      );
+    },
+    [data, issues],
   );
 
   const availablePriorities = useMemo(
-    () =>
-      Array.from(
+    () => {
+      // Prefer server facets (full JQL match-set), fallback to current page values
+      const facetPriorities = (data as any)?.facets?.priorities as string[] | undefined;
+      if (Array.isArray(facetPriorities) && facetPriorities.length > 0) {
+        return facetPriorities;
+      }
+      return Array.from(
         new Set(
           issues
             .map((issue) => issue.priority)
             .filter((priority): priority is string => Boolean(priority)),
         ),
-      ),
-    [issues],
+      );
+    },
+    [data, issues],
   );
 
   const hasActiveFilters = statusFilter.length > 0 || priorityFilter.length > 0;
@@ -277,9 +294,13 @@ export function PortalJQLTable(
   const handleSort = (columnId: string) => {
     if (sortColumn === columnId) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      // Sorting changes affect ordering across entire set; reset to first page
+      setCurrentPage(0);
     } else {
       setSortColumn(columnId);
       setSortDirection("asc");
+      // Sorting changes affect ordering across entire set; reset to first page
+      setCurrentPage(0);
     }
   };
 
@@ -376,19 +397,22 @@ export function PortalJQLTable(
     }
   };
 
-  // Sort issues client-side (search and filter are now server-side)
-  // NOTE: Search and status/priority filters are now handled by the server
-  // which searches across the ENTIRE result set, not just the current page
-  const sortedIssues = useMemo(() => {
-    // Apply client-side sort only (for column header sorting)
+  /**
+  * Display issues:
+  * - In JQL mode: server sorts the ENTIRE result set via sortField/sortDir, so do NOT sort client-side.
+  * - In non-JQL (project) mode: keep client-side sorting (because that endpoint doesn't support sort params).
+  */
+  const displayIssues = useMemo(() => {
+    if (shouldUseJQL) {
+      return issues;
+    }
     if (!sortColumn) {
       return issues;
     }
-
     return [...issues].sort((a, b) => {
       const aVal = getIssueFieldValueForSort(a, sortColumn);
       const bVal = getIssueFieldValueForSort(b, sortColumn);
-
+      
       if (!aVal && !bVal) return 0;
       if (!aVal) return 1;
       if (!bVal) return -1;
@@ -396,7 +420,7 @@ export function PortalJQLTable(
       const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [issues, sortColumn, sortDirection]);
+  }, [issues, shouldUseJQL, sortColumn, sortDirection]);
 
   const buildIssueUrl = (issue: Issue): string | null => {
     if (!issue?.key) return null;
@@ -933,8 +957,8 @@ export function PortalJQLTable(
       {!isLoading && !error && (
         <div className="text-sm text-muted-foreground flex items-center justify-between">
           <span>
-            Showing {sortedIssues.length} {sortedIssues.length === 1 ? "result" : "results"}
-            {data?.totalCount && data.totalCount > sortedIssues.length && (
+            Showing {displayIssues.length} {displayIssues.length === 1 ? "result" : "results"}
+            {data?.totalCount && data.totalCount > displayIssues.length && (
               <span> of {data.totalCount} total</span>
             )}
             {(debouncedSearchTerm || hasActiveFilters) && (
@@ -967,7 +991,7 @@ export function PortalJQLTable(
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedIssues.length === 0 ? (
+              {displayIssues.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={columns.length + 1} className="text-center py-8 text-muted-foreground">
                     {debouncedSearchTerm || hasActiveFilters ? (
