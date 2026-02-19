@@ -1,3 +1,8 @@
+const getAriaSort = (columnId: string): "none" | "ascending" | "descending" => {
+  if (sortColumn !== columnId) return "none";
+  return sortDirection === "asc" ? "ascending" : "descending";
+};
+
  const handleSort = (columnId: string) => {
     if (sortColumn === columnId) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -21,14 +26,31 @@
                 {columns.map((column) => (
                   <TableHead key={column.id}>
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto p-0 hover:bg-transparent font-semibold"
-                      onClick={() => handleSort(column.id)}
-                    >
-                      {column.name}
-                      <ArrowUpDown className="ml-2 h-3 w-3" />
-                    </Button>
+  variant="ghost"
+  size="sm"
+  onClick={() => handleSort(column.id)}
+  aria-sort={getAriaSort(column.id)}
+  className={cn(
+    "group h-auto p-0 hover:bg-transparent font-semibold",
+    "w-full inline-flex items-center justify-start gap-2 text-left",
+    "cursor-pointer select-none"
+  )}
+>
+  <span className="group-hover:underline">{column.name}</span>
+
+  {sortColumn === column.id ? (
+    sortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3" aria-label="Sorted ascending" />
+    ) : (
+      <ArrowDown className="h-3 w-3" aria-label="Sorted descending" />
+    )
+  ) : (
+    <ArrowUpDown
+      className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-40"
+      aria-hidden="true"
+    />
+  )}
+</Button>
                   </TableHead>
                 ))}
                 <TableHead className="w-10"></TableHead>
