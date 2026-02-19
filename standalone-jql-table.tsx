@@ -1,3 +1,5 @@
+// /rail-at-sas/frontend/components/landing/standalone-jql-table.tsx
+
 /**
  * StandaloneJQLTable Component
  *
@@ -10,6 +12,7 @@
  * - Column sorting
  * - Pagination
  * - Empty state handling
+ * - Smart linking: Redirects to Customer Portal if serviceDeskId is present
  */
 
 import { useState, useMemo, useEffect } from "react";
@@ -239,10 +242,22 @@ export function StandaloneJQLTable({
     });
   }, [issues, sortColumn, sortDirection]);
 
-  // Build issue URL (always use /browse/{key} for landing page)
-  const buildIssueUrl = (issueKey?: string | null): string | null => {
-    if (!issueKey) return null;
-    return `/browse/${issueKey}`;
+  /**
+   * Builds the issue URL.
+   * Uses the Customer Portal URL if a serviceDeskId is available.
+   * Falls back to the standard Jira browse URL otherwise.
+   */
+  const buildIssueUrl = (issue: Issue): string | null => {
+    if (!issue.key) return null;
+
+    // Using 'as any' here to access serviceDeskId if the Issue type hasn't been strictly updated yet
+    const serviceDeskId = issue.serviceDeskId
+
+    if (serviceDeskId) {
+      return `/servicedesk/customer/portal/${serviceDeskId}/${issue.key}`;
+    }
+
+    return `/browse/${issue.key}`;
   };
 
   // Status category colors based on Jira Data Center standard categories
@@ -855,7 +870,7 @@ export function StandaloneJQLTable({
                           </Badge>
                         ) : column.id === "key" ? (
                           (() => {
-                            const issueUrl = buildIssueUrl(issue.key);
+                            const issueUrl = buildIssueUrl(issue);
                             const keyText = getIssueFieldValue(issue, column);
                             if (!issueUrl) {
                               return (
@@ -890,7 +905,7 @@ export function StandaloneJQLTable({
                     ))}
                     <TableCell>
                       {(() => {
-                        const issueUrl = buildIssueUrl(issue.key);
+                        const issueUrl = buildIssueUrl(issue);
                         if (!issueUrl) return null;
                         return (
                           <a
