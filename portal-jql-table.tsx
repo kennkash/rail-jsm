@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ArrowUpDown, Search, Filter, ExternalLink, Loader2, GripVertical, X, Plus } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Search, Filter, ExternalLink, Loader2, GripVertical, X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortalBuilderStore } from "@/stores/portal-builder-store";
 import { useShallow } from "zustand/react/shallow";
@@ -304,6 +304,14 @@ export function PortalJQLTable(
     }
   };
 
+  /** Returns the appropriate aria-sort value for a column header
+   * Used for accessibility to indicate current sort state (icon indication)
+  */
+  const getAriaSort = (columnId: string): "none" | "ascending" | "descending" => {
+    if (sortColumn !== columnId) return "none";
+    return sortDirection === "asc" ? "ascending" : "descending";
+  };
+
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
   };
@@ -409,6 +417,7 @@ export function PortalJQLTable(
     if (!sortColumn) {
       return issues;
     }
+
     return [...issues].sort((a, b) => {
       const aVal = getIssueFieldValueForSort(a, sortColumn);
       const bVal = getIssueFieldValueForSort(b, sortColumn);
@@ -958,7 +967,7 @@ export function PortalJQLTable(
         <div className="text-sm text-muted-foreground flex items-center justify-between">
           <span>
             Showing {displayIssues.length} {displayIssues.length === 1 ? "result" : "results"}
-            {data?.totalCount && data.totalCount > displayIssues.length && (
+            {data?.totalCount !== undefined && data.totalCount > displayIssues.length && (
               <span> of {data.totalCount} total</span>
             )}
             {(debouncedSearchTerm || hasActiveFilters) && (
@@ -979,11 +988,28 @@ export function PortalJQLTable(
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-auto p-0 hover:bg-transparent font-semibold"
                       onClick={() => handleSort(column.id)}
+                      aria-sort={getAriaSort(column.id)}
+                      className={cn(
+                        "group h-auto p-0 hover:bg-transparent font-semibold",
+                        "w-full inline-flex items-center justify-start gap-2 text-left",
+                        "cursor-pointer select-none"
+                      )}
                     >
-                      {column.name}
-                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                      <span className="group-hover:underline">{column.name}</span>
+
+                      {sortColumn === column.id ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="h-3 w-3" aria-label="Sorted ascending" />
+                        ) : (
+                          <ArrowDown className="h-3 w-3" aria-label="Sorted descending" />
+                        )
+                      ) : (
+                        <ArrowUpDown
+                          className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-40"
+                          aria-hidden="true"
+                        />
+                      )}
                     </Button>
                   </TableHead>
                 ))}
@@ -1020,3 +1046,157 @@ export function PortalJQLTable(
                     )}
                   </TableCell>
                 </TableRow>
+                              ) : (
+                displayIssues.map((issue) => (
+                  <TableRow key={issue.key} className="hover:bg-muted transition-colors">
+                    {columns.map((column) => (
+                      <TableCell key={column.id}>
+                        {column.id === "status" ? (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "border",
+                              getStatusColor(issue)
+                            )}
+                          >
+                            {getIssueFieldValue(issue, column)}
+                          </Badge>
+                        ) : column.id === "priority" ? (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "border",
+                              priorityColors[issue.priority] || priorityColors["Medium"]
+                            )}
+                          >
+                            {getIssueFieldValue(issue, column)}
+                          </Badge>
+                        ) : column.id === "key" ? (
+                          (() => {
+                            const issueUrl = buildIssueUrl(issue);
+                            const keyText = getIssueFieldValue(issue, column);
+                            if (!issueUrl) {
+                              return (
+                                <span className="font-mono text-sm font-medium text-primary">
+                                  {keyText}
+                                </span>
+                              );
+                            }
+                            return (
+                              <a
+                                href={issueUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-sm font-medium text-primary rounded-sm px-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {keyText}
+                              </a>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-sm" title={getIssueFieldValue(issue, column)}>
+                            {column.id === "summary"
+                              ? getIssueFieldValue(issue, column).length > 60
+                                ? getIssueFieldValue(issue, column).substring(0, 60) + "..."
+                                : getIssueFieldValue(issue, column)
+                              : getIssueFieldValue(issue, column)
+                            }
+                          </span>
+                        )}
+                      </TableCell>
+                    ))}
+                    <TableCell>
+                      {(() => {
+                        const issueUrl = buildIssueUrl(issue);
+                        if (!issueUrl) return null;
+                        return (
+                          <a
+                            href={issueUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        );
+                      })()}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!isLoading && !error && data && (
+        <div className="flex items-center justify-between text-sm">
+          <div className="text-muted-foreground">
+            Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, data.totalCount)} of {data.totalCount} results
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!data.hasPreviousPage}
+              onClick={() => handlePageChange(currentPage - 1)}
+            >
+              Previous
+            </Button>
+            <span className="px-3 py-2 text-xs text-muted-foreground">
+              Page {currentPage + 1} of {Math.ceil(data.totalCount / pageSize)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!data.hasNextPage}
+              onClick={() => handlePageChange(currentPage + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+/**
+ * Sortable Column Item for drag-and-drop reordering
+ */
+function SortableColumnItem({
+  column,
+  onRemove,
+}: {
+  column: ColumnConfig;
+  onRemove: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: column.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 p-2 bg-background border rounded-md"
+    >
+      <button
+        type="button"
+        className="cursor-grab hover:bg-muted rounded p-1"
+        {...attributes}
+        {...listeners}
+      >
