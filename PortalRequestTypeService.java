@@ -1,3 +1,11 @@
+RequestTypeQuery sortedQuery = jsdRequestTypeService.newQueryBuilder()
+        .serviceDesk(serviceDesk.getId())
+        .group(groupId)
+        .pagedRequest(SimplePagedRequest.paged(0, 100))
+        .requestOverrideSecurity(Boolean.TRUE)
+        .filterHidden(Boolean.TRUE)
+        .build();
+
 if (!groupMap.containsKey(groupId)) {
     groupDiscoveryOrder.add(groupId);
 
