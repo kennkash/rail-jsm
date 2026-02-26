@@ -1,3 +1,11 @@
+const sortedGroupNames =
+  apiGroups.length > 0
+    ? [...apiGroups]
+        .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999))
+        .map(g => g.name)
+    : Object.keys(sections).sort();
+
+
 // rail-at-sas/frontend/components/portal-builder/form-components/portal-request-types.tsx
 'use client'
 
