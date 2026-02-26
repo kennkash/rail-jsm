@@ -1,3 +1,22 @@
+2026-02-26T17:58:09,300 WARN [runner.ScriptBindingsManager]: Group: Confluence
+2026-02-26T17:58:09,301 WARN [runner.ScriptBindingsManager]:   ID: 49
+2026-02-26T17:58:09,301 WARN [runner.ScriptBindingsManager]:   Order Optional: Optional[0]
+2026-02-26T17:58:09,301 WARN [runner.ScriptBindingsManager]:   Order Present?: true
+2026-02-26T17:58:09,301 WARN [runner.ScriptBindingsManager]:   Order Value: 0
+2026-02-26T17:58:09,301 WARN [runner.ScriptBindingsManager]: ------------------------------------
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]: Group: Jira
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   ID: 50
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Optional: Optional[1]
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Present?: true
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Value: 1
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]: ------------------------------------
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]: Group: Development
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   ID: 417
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Optional: Optional[3]
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Present?: true
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]:   Order Value: 3
+2026-02-26T17:58:09,302 WARN [runner.ScriptBindingsManager]: ------------------------------------
+
 import com.atlassian.jira.component.ComponentAccessor
 import com.atlassian.servicedesk.api.ServiceDeskManager
 import com.atlassian.servicedesk.api.requesttype.RequestTypeService
