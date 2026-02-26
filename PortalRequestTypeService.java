@@ -1,3 +1,23 @@
+if (!groupMap.containsKey(groupId)) {
+    groupDiscoveryOrder.add(groupId);
+
+    RequestTypeGroupDTO newGroup = new RequestTypeGroupDTO(String.valueOf(groupId), group.getName());
+    newGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
+
+    // ✅ Use Jira’s configured group order (drag-and-drop order)
+    Optional<Integer> orderOpt = group.getOrder();
+    if (orderOpt.isPresent()) {
+        newGroup.setDisplayOrder(orderOpt.get());
+    } else {
+        // Fallback: stable discovery order
+        newGroup.setDisplayOrder(groupDiscoveryOrder.size());
+    }
+
+    newGroup.setRequestTypeCount(0);
+    groupMap.put(groupId, newGroup);
+}
+
+
 /* /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/service/PortalRequestTypeService.java */
 
 package com.samsungbuilder.jsm.service;
