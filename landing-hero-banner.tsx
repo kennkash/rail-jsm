@@ -1,3 +1,24 @@
+I just noticed my IDE is giving me a deprecated error for the .search method in flexsearch. This is the error:
+
+The signature '(query: string, limit: number, options?: SearchOptions<true> | undefined): DefaultSearchResults' of 'portalKeyIndex.search' is deprecated.ts(6387)
+index.d.ts(248, 13): The declaration was marked as deprecated here.
+(method) Index<false, false, true>.search<true>(query: string, limit: Limit, options?: SearchOptions<true> | undefined): DefaultSearchResults (+3 overloads)
+@deprecated — Pass "limit" within options
+
+
+
+This is index.d.ts(248, 13):
+search(query: string): SearchResults<W, S, r>;
+        /** @deprecated Pass "limit" within options */
+        search<R extends boolean = r>(query: string, limit: Limit, options?: SearchOptions<R>): SearchResults<W, S, R>;
+        search<R extends boolean = r>(query: string, options?: SearchOptions<R>): SearchResults<W, S, R>;
+        search<R extends boolean = r>(options: SearchOptions<R>): SearchResults<W, S, R>;
+
+
+
+
+
+
 --- a/frontend/components/landing/landing-hero-banner.tsx
 +++ b/frontend/components/landing/landing-hero-banner.tsx
 @@
