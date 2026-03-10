@@ -1,3 +1,7 @@
+Type '{ visiblePortals: PortalInfo[]; onPortalSelect: (portal: PortalInfo) => void; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'visiblePortals' does not exist on type 'IntrinsicAttributes'.ts(2322)
+
+
 // /rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
 
 "use client";
