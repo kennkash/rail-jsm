@@ -1,4 +1,4 @@
-// rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
+// /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 
 "use client";
 
