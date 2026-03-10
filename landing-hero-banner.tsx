@@ -1,3 +1,148 @@
+--- a/frontend/components/landing/landing-hero-banner.tsx
++++ b/frontend/components/landing/landing-hero-banner.tsx
+@@
+ type PortalSearchDoc = {
+   id: string;
+   type: "portal";
+   portal: PortalInfo;
+   projectName: string;
+   projectKey: string;
+   description: string;
+   normalizedProjectName: string;
++  normalizedProjectKey: string;
+   normalizedDescription: string;
+ };
+@@
+ type SearchResultItem =
+   | {
+       id: string;
+       type: "portal";
+       score: number;
+-      matchedOn: "projectName" | "description";
++      matchedOn: "projectName" | "projectKey" | "description";
+       portal: PortalInfo;
+       projectName: string;
+       projectKey: string;
+       description: string;
+@@
+         return {
+           id: `portal:${portal.projectKey}`,
+           type: "portal",
+           portal,
+           projectName: portal.projectName ?? "",
+           projectKey: portal.projectKey ?? "",
+           description,
+           normalizedProjectName: normalizeSearchText(portal.projectName),
++          normalizedProjectKey: normalizeSearchText(portal.projectKey),
+           normalizedDescription: normalizeSearchText(description),
+         };
+       });
+   }, [visiblePortals, projectsByKey]);
+@@
+   const portalNameIndex = useMemo(() => {
+     const index = new Index({ tokenize: "forward" });
+     for (const doc of portalDocs) {
+       if (doc.normalizedProjectName) {
+         index.add(doc.id, doc.normalizedProjectName);
+       }
+     }
+     return index;
+   }, [portalDocs]);
++
++  const portalKeyIndex = useMemo(() => {
++    const index = new Index({ tokenize: "forward" });
++    for (const doc of portalDocs) {
++      if (doc.normalizedProjectKey) {
++        index.add(doc.id, doc.normalizedProjectKey);
++      }
++    }
++    return index;
++  }, [portalDocs]);
+ 
+   const portalDescriptionIndex = useMemo(() => {
+     const index = new Index({ tokenize: "forward" });
+     for (const doc of portalDocs) {
+       if (doc.normalizedDescription) {
+@@
+   const combinedResults = useMemo<SearchResultItem[]>(() => {
+     const query = normalizeSearchText(debouncedSearchTerm);
+     if (query.length < 2) return [];
+ 
+     const resultsMap = new Map<string, SearchResultItem>();
+ 
+     const portalNameMatches = portalNameIndex.search(query, 20) as string[];
++    const portalKeyMatches = portalKeyIndex.search(query, 20) as string[];
+     const portalDescriptionMatches = portalDescriptionIndex.search(query, 20) as string[];
+     const requestTypeMatches = requestTypeIndex.search(query, 20) as string[];
+ 
+     for (const id of portalNameMatches) {
+       const doc = portalDocsById.get(String(id));
+@@
+         description: doc.description,
+       });
+     }
++
++    for (const id of portalKeyMatches) {
++      const doc = portalDocsById.get(String(id));
++      if (!doc) continue;
++
++      const score = getFieldScore(query, doc.normalizedProjectKey, 2500, 400, 200, 90);
++      if (score <= 0) continue;
++
++      const existing = resultsMap.get(doc.id);
++      if (!existing || existing.score < score) {
++        resultsMap.set(doc.id, {
++          id: doc.id,
++          type: "portal",
++          score,
++          matchedOn: "projectKey",
++          portal: doc.portal,
++          projectName: doc.projectName,
++          projectKey: doc.projectKey,
++          description: doc.description,
++        });
++      }
++    }
+ 
+     for (const id of portalDescriptionMatches) {
+       const doc = portalDocsById.get(String(id));
+       if (!doc) continue;
+@@
+   }, [
+     debouncedSearchTerm,
+     portalNameIndex,
++    portalKeyIndex,
+     portalDescriptionIndex,
+     requestTypeIndex,
+     portalDocsById,
+     requestTypeDocsById,
+   ]);
+@@
+                             <Badge variant="outline" className="text-[10px]">
+-                              {item.matchedOn === "projectName"
+-                                ? "Matched on project name"
+-                                : "Matched on description"}
++                              {item.matchedOn === "projectName"
++                                ? "Matched on project name"
++                                : item.matchedOn === "projectKey"
++                                  ? "Matched on project key"
++                                  : "Matched on description"}
+                             </Badge>
+                           </div>
+ 
+                           <div className="text-xs text-muted-foreground truncate mt-0.5">
+-                            {item.projectKey}
++                            {item.matchedOn === "projectKey"
++                              ? highlightText(item.projectKey, debouncedSearchTerm)
++                              : item.projectKey}
+                           </div>
+ 
+                           {item.description && (
+                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                               {item.matchedOn === "description"
+
+
+
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 
 "use client";
