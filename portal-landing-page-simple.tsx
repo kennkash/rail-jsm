@@ -1,15 +1,16 @@
-// /mnt/k.kashmiry/git/rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
+// /rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
 
 "use client";
 
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FolderTree, Search, Loader2, ListTodo, CheckCircle, ClipboardList } from "lucide-react";
+import { Clock, FolderTree, Search, Loader2, ListTodo, CheckCircle, ClipboardList, Info, ExternalLink} from "lucide-react";
 import { CloudGPTIcon } from "@/components/ui/cloudgpt-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { usePortals } from "@/hooks/use-portals";
 import { useRecentPortals } from "@/hooks/use-recent-portals";
@@ -25,6 +26,7 @@ import { searchProjects } from "@/lib/api/projects-client";
 import { ROUTE_PATHS } from "@/types/router";
 
 const HEADER_HEIGHT = 56;
+const DOC_URL = "https://confluence.samsungaustin.com/x/Kt7iLw";
 
 // Valid tab values from query parameter
 type TabValue = "all" | "recent" | "requests" | "approvals" | "assigned";
@@ -59,14 +61,14 @@ export function PortalLandingPageSimple() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
+
   // Get resource base for asset paths
   const getResourceBase = () => {
     if (typeof window === "undefined") return "";
     const bootstrap = (window as BootstrapWindow).RAIL_PORTAL_BOOTSTRAP;
     return bootstrap?.resourceBase || "";
   };
-  
+
   const resourceBase = getResourceBase();
   const normalizedBase = resourceBase.endsWith("/") ? resourceBase.slice(0, -1) : resourceBase;
   // Construct the full path to the Samsung logo using the Atlassian plugin resource path
@@ -93,6 +95,9 @@ export function PortalLandingPageSimple() {
   const [isGlobalSearching, setIsGlobalSearching] = useState(false);
   const [globalSearchError, setGlobalSearchError] = useState<string | null>(null);
 
+  // Info icon popover state
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+
   // Sync URL query param changes to tab state (e.g., browser back/forward)
   useEffect(() => {
     const newTab = getTabFromQuery(searchParams);
@@ -103,11 +108,11 @@ export function PortalLandingPageSimple() {
 
   // Handle tab changes by navigating to the corresponding URL with query param
   const setActiveTab = useCallback((tab: TabValue) => {
-    const queryValue = TAB_TO_QUERY[tab];
-    const basePath = ROUTE_PATHS.CUSTOMER_PORTAL;
-    const targetUrl = queryValue ? `${basePath}?tab=${queryValue}` : basePath;
-    navigate(targetUrl);
-    setActiveTabState(tab);
+      const queryValue = TAB_TO_QUERY[tab];
+      const basePath = ROUTE_PATHS.CUSTOMER_PORTAL;
+      const targetUrl = queryValue ? `${basePath}?tab=${queryValue}` : basePath;
+      navigate(targetUrl);
+      setActiveTabState(tab);
   }, [navigate]);
 
   // Echo AI state
@@ -303,7 +308,7 @@ export function PortalLandingPageSimple() {
                 <TabsTrigger value="assigned" className="cursor-pointer">
                   <ClipboardList className="h-3.5 w-3.5 mr-1.5" />
                   Assigned to Me
-                  </TabsTrigger>
+                </TabsTrigger>
               </TabsList>
 
               {/* Recently Visited Portals Tab */}
@@ -445,6 +450,55 @@ export function PortalLandingPageSimple() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Info Icon - Bottom Left Corner */}
+      <div className="fixed bottom-4 left-4 z-50">
+        <Popover open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="relative h-10 w-10 rounded-full shadow-sm bg-blue-100 hover:bg-blue-200 cursor-pointer"
+              aria-label="Help: New ticket portal"
+            >
+              <Info className="h-5 w-5 text-primary" />
+              {/* Optional attention dot */}
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
+                !
+              </span>
+            </Button>
+          </PopoverTrigger>
+
+          <PopoverContent align="start" side="top" className="w-80 p-4">
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">New Ticket Portal</div>
+                <p className="text-sm text-muted-foreground">
+                  Learn what changed, how to find request types, and where common actions moved in the new portal.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setIsInfoOpen(false)}>
+                  Close
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    window.open(DOC_URL, "_blank", "noopener,noreferrer");
+                    setIsInfoOpen(false);
+                  }}
+                >
+                  Open documentation
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }
