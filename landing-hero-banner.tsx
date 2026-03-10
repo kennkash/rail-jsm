@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,8 @@ import type { PortalInfo } from "@/lib/api/portals-client";
 const HERO_TITLE = "Samsung Customer Request Portal";
 const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
-const HERO_BACKGROUND_IMAGE = "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
+const HERO_BACKGROUND_IMAGE =
+  "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 
 type LandingHeroBannerProps = {
   visiblePortals: PortalInfo[];
@@ -59,6 +60,7 @@ type SearchResultItem =
       id: string;
       type: "requestType";
       score: number;
+      matchedOn: "requestTypeName";
       result: GlobalRequestTypeSearchResult;
     };
 
@@ -71,6 +73,86 @@ function normalizeSearchText(value?: string): string {
     .replace(/[^\p{L}\p{N}\s]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildLooseMatchRegex(query: string): RegExp | null {
+  const normalized = normalizeSearchText(query);
+  if (!normalized) return null;
+
+  const parts = normalized
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map(escapeRegExp);
+
+  if (!parts.length) return null;
+
+  const pattern = parts.join("[\\s#._-]*");
+  return new RegExp(`(#?${pattern})`, "i");
+}
+
+function highlightText(text: string, query: string): ReactNode {
+  if (!text?.trim()) return text;
+
+  const regex = buildLooseMatchRegex(query);
+  if (!regex) return text;
+
+  const match = text.match(regex);
+  if (!match || match.index == null) return text;
+
+  const start = match.index;
+  const end = start + match[0].length;
+
+  return (
+    <>
+      {text.slice(0, start)}
+      <mark className="rounded bg-yellow-200/70 px-0.5 text-inherit">
+        {text.slice(start, end)}
+      </mark>
+      {text.slice(end)}
+    </>
+  );
+}
+
+function getHighlightedSnippet(text: string, query: string, radius = 55): ReactNode {
+  if (!text?.trim()) return text;
+
+  const regex = buildLooseMatchRegex(query);
+  if (!regex) return text;
+
+  const match = text.match(regex);
+  if (!match || match.index == null) return text;
+
+  const start = Math.max(0, match.index - radius);
+  const end = Math.min(text.length, match.index + match[0].length + radius);
+
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < text.length ? "…" : "";
+  const visible = text.slice(start, end);
+
+  const localMatch = visible.match(regex);
+  if (!localMatch || localMatch.index == null) {
+    return `${prefix}${visible}${suffix}`;
+  }
+
+  const localStart = localMatch.index;
+  const localEnd = localStart + localMatch[0].length;
+
+  return (
+    <>
+      {prefix}
+      {visible.slice(0, localStart)}
+      <mark className="rounded bg-yellow-200/70 px-0.5 text-inherit">
+        {visible.slice(localStart, localEnd)}
+      </mark>
+      {visible.slice(localEnd)}
+      {suffix}
+    </>
+  );
 }
 
 function getFieldScore(
@@ -92,28 +174,24 @@ export function LandingHeroBanner({
   visiblePortals,
   onPortalSelect,
 }: LandingHeroBannerProps) {
-  // Search dialog state
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Project metadata for description-based portal search
   const [portalProjects, setPortalProjects] = useState<Project[]>([]);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  // Icon mapping for request types (fetched from JSM API)
   const [iconMapping, setIconMapping] = useState<Record<string, string>>({});
 
-  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
     }, 300);
+
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Fetch all projects, then keep only the ones that are visible portals
   useEffect(() => {
     let cancelled = false;
 
@@ -123,6 +201,7 @@ export function LandingHeroBanner({
 
       try {
         const response = await fetchProjects();
+
         const visiblePortalKeys = new Set(
           visiblePortals
             .map((portal) => portal.projectKey?.toUpperCase())
@@ -156,11 +235,9 @@ export function LandingHeroBanner({
     };
   }, [visiblePortals]);
 
-  // Global request type search query
   const { data: searchResults, isLoading: isSearchingRequestTypes } =
     useGlobalRequestTypeSearch(debouncedSearchTerm);
 
-  // Fetch icons for all unique service desks in the request type results
   useEffect(() => {
     if (!searchResults?.results?.length) {
       return;
@@ -200,7 +277,6 @@ export function LandingHeroBanner({
     };
   }, [searchResults?.results]);
 
-  // Enrich request type results with icon URLs
   const enrichedRequestTypeResults = useMemo(() => {
     if (!searchResults?.results) return [];
     if (Object.keys(iconMapping).length === 0) return searchResults.results;
@@ -313,15 +389,7 @@ export function LandingHeroBanner({
       const doc = portalDocsById.get(String(id));
       if (!doc) continue;
 
-      const score = getFieldScore(
-        query,
-        doc.normalizedProjectName,
-        3000,
-        500,
-        250,
-        100
-      );
-
+      const score = getFieldScore(query, doc.normalizedProjectName, 3000, 500, 250, 100);
       if (score <= 0) continue;
 
       resultsMap.set(doc.id, {
@@ -340,15 +408,7 @@ export function LandingHeroBanner({
       const doc = portalDocsById.get(String(id));
       if (!doc) continue;
 
-      const score = getFieldScore(
-        query,
-        doc.normalizedDescription,
-        2000,
-        250,
-        100,
-        50
-      );
-
+      const score = getFieldScore(query, doc.normalizedDescription, 2000, 250, 100, 50);
       if (score <= 0) continue;
 
       const existing = resultsMap.get(doc.id);
@@ -370,21 +430,14 @@ export function LandingHeroBanner({
       const doc = requestTypeDocsById.get(String(id));
       if (!doc) continue;
 
-      const score = getFieldScore(
-        query,
-        doc.normalizedRequestTypeName,
-        1000,
-        300,
-        150,
-        75
-      );
-
+      const score = getFieldScore(query, doc.normalizedRequestTypeName, 1000, 300, 150, 75);
       if (score <= 0) continue;
 
       resultsMap.set(doc.id, {
         id: doc.id,
         type: "requestType",
         score,
+        matchedOn: "requestTypeName",
         result: doc.result,
       });
     }
@@ -425,8 +478,7 @@ export function LandingHeroBanner({
   );
 
   const isSearching =
-    debouncedSearchTerm.length >= 2 &&
-    (isProjectsLoading || isSearchingRequestTypes);
+    debouncedSearchTerm.length >= 2 && (isProjectsLoading || isSearchingRequestTypes);
 
   const handleRequestTypeClick = (result: GlobalRequestTypeSearchResult) => {
     const url = buildRequestTypeUrl(
@@ -543,11 +595,15 @@ export function LandingHeroBanner({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="font-medium text-sm text-foreground truncate">
-                              {item.projectName}
+                              {item.matchedOn === "projectName"
+                                ? highlightText(item.projectName, debouncedSearchTerm)
+                                : item.projectName}
                             </div>
+
                             <Badge variant="secondary" className="text-[10px]">
                               Portal
                             </Badge>
+
                             <Badge variant="outline" className="text-[10px]">
                               {item.matchedOn === "projectName"
                                 ? "Matched on project name"
@@ -561,7 +617,9 @@ export function LandingHeroBanner({
 
                           {item.description && (
                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                              {item.description}
+                              {item.matchedOn === "description"
+                                ? getHighlightedSnippet(item.description, debouncedSearchTerm)
+                                : item.description}
                             </div>
                           )}
                         </div>
@@ -607,8 +665,11 @@ export function LandingHeroBanner({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="font-medium text-sm text-foreground truncate">
-                                {result.requestType.name}
+                                {item.matchedOn === "requestTypeName"
+                                  ? highlightText(result.requestType.name, debouncedSearchTerm)
+                                  : result.requestType.name}
                               </div>
+
                               <Badge variant="secondary" className="text-[10px]">
                                 Request Type
                               </Badge>
