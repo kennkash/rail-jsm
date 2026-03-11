@@ -1,171 +1,4 @@
-I just noticed my IDE is giving me a deprecated error for the .search method in flexsearch. This is the error:
-
-The signature '(query: string, limit: number, options?: SearchOptions<true> | undefined): DefaultSearchResults' of 'portalKeyIndex.search' is deprecated.ts(6387)
-index.d.ts(248, 13): The declaration was marked as deprecated here.
-(method) Index<false, false, true>.search<true>(query: string, limit: Limit, options?: SearchOptions<true> | undefined): DefaultSearchResults (+3 overloads)
-@deprecated — Pass "limit" within options
-
-
-
-This is index.d.ts(248, 13):
-search(query: string): SearchResults<W, S, r>;
-        /** @deprecated Pass "limit" within options */
-        search<R extends boolean = r>(query: string, limit: Limit, options?: SearchOptions<R>): SearchResults<W, S, R>;
-        search<R extends boolean = r>(query: string, options?: SearchOptions<R>): SearchResults<W, S, R>;
-        search<R extends boolean = r>(options: SearchOptions<R>): SearchResults<W, S, R>;
-
-
-
-
-
-
---- a/frontend/components/landing/landing-hero-banner.tsx
-+++ b/frontend/components/landing/landing-hero-banner.tsx
-@@
- type PortalSearchDoc = {
-   id: string;
-   type: "portal";
-   portal: PortalInfo;
-   projectName: string;
-   projectKey: string;
-   description: string;
-   normalizedProjectName: string;
-+  normalizedProjectKey: string;
-   normalizedDescription: string;
- };
-@@
- type SearchResultItem =
-   | {
-       id: string;
-       type: "portal";
-       score: number;
--      matchedOn: "projectName" | "description";
-+      matchedOn: "projectName" | "projectKey" | "description";
-       portal: PortalInfo;
-       projectName: string;
-       projectKey: string;
-       description: string;
-@@
-         return {
-           id: `portal:${portal.projectKey}`,
-           type: "portal",
-           portal,
-           projectName: portal.projectName ?? "",
-           projectKey: portal.projectKey ?? "",
-           description,
-           normalizedProjectName: normalizeSearchText(portal.projectName),
-+          normalizedProjectKey: normalizeSearchText(portal.projectKey),
-           normalizedDescription: normalizeSearchText(description),
-         };
-       });
-   }, [visiblePortals, projectsByKey]);
-@@
-   const portalNameIndex = useMemo(() => {
-     const index = new Index({ tokenize: "forward" });
-     for (const doc of portalDocs) {
-       if (doc.normalizedProjectName) {
-         index.add(doc.id, doc.normalizedProjectName);
-       }
-     }
-     return index;
-   }, [portalDocs]);
-+
-+  const portalKeyIndex = useMemo(() => {
-+    const index = new Index({ tokenize: "forward" });
-+    for (const doc of portalDocs) {
-+      if (doc.normalizedProjectKey) {
-+        index.add(doc.id, doc.normalizedProjectKey);
-+      }
-+    }
-+    return index;
-+  }, [portalDocs]);
- 
-   const portalDescriptionIndex = useMemo(() => {
-     const index = new Index({ tokenize: "forward" });
-     for (const doc of portalDocs) {
-       if (doc.normalizedDescription) {
-@@
-   const combinedResults = useMemo<SearchResultItem[]>(() => {
-     const query = normalizeSearchText(debouncedSearchTerm);
-     if (query.length < 2) return [];
- 
-     const resultsMap = new Map<string, SearchResultItem>();
- 
-     const portalNameMatches = portalNameIndex.search(query, 20) as string[];
-+    const portalKeyMatches = portalKeyIndex.search(query, 20) as string[];
-     const portalDescriptionMatches = portalDescriptionIndex.search(query, 20) as string[];
-     const requestTypeMatches = requestTypeIndex.search(query, 20) as string[];
- 
-     for (const id of portalNameMatches) {
-       const doc = portalDocsById.get(String(id));
-@@
-         description: doc.description,
-       });
-     }
-+
-+    for (const id of portalKeyMatches) {
-+      const doc = portalDocsById.get(String(id));
-+      if (!doc) continue;
-+
-+      const score = getFieldScore(query, doc.normalizedProjectKey, 2500, 400, 200, 90);
-+      if (score <= 0) continue;
-+
-+      const existing = resultsMap.get(doc.id);
-+      if (!existing || existing.score < score) {
-+        resultsMap.set(doc.id, {
-+          id: doc.id,
-+          type: "portal",
-+          score,
-+          matchedOn: "projectKey",
-+          portal: doc.portal,
-+          projectName: doc.projectName,
-+          projectKey: doc.projectKey,
-+          description: doc.description,
-+        });
-+      }
-+    }
- 
-     for (const id of portalDescriptionMatches) {
-       const doc = portalDocsById.get(String(id));
-       if (!doc) continue;
-@@
-   }, [
-     debouncedSearchTerm,
-     portalNameIndex,
-+    portalKeyIndex,
-     portalDescriptionIndex,
-     requestTypeIndex,
-     portalDocsById,
-     requestTypeDocsById,
-   ]);
-@@
-                             <Badge variant="outline" className="text-[10px]">
--                              {item.matchedOn === "projectName"
--                                ? "Matched on project name"
--                                : "Matched on description"}
-+                              {item.matchedOn === "projectName"
-+                                ? "Matched on project name"
-+                                : item.matchedOn === "projectKey"
-+                                  ? "Matched on project key"
-+                                  : "Matched on description"}
-                             </Badge>
-                           </div>
- 
-                           <div className="text-xs text-muted-foreground truncate mt-0.5">
--                            {item.projectKey}
-+                            {item.matchedOn === "projectKey"
-+                              ? highlightText(item.projectKey, debouncedSearchTerm)
-+                              : item.projectKey}
-                           </div>
- 
-                           {item.description && (
-                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                               {item.matchedOn === "description"
-
-
-
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
-
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
@@ -185,8 +18,7 @@ import type { PortalInfo } from "@/lib/api/portals-client";
 const HERO_TITLE = "Samsung Customer Request Portal";
 const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
-const HERO_BACKGROUND_IMAGE =
-  "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
+const HERO_BACKGROUND_IMAGE = "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 
 type LandingHeroBannerProps = {
   visiblePortals: PortalInfo[];
@@ -201,6 +33,7 @@ type PortalSearchDoc = {
   projectKey: string;
   description: string;
   normalizedProjectName: string;
+  normalizedProjectKey: string;
   normalizedDescription: string;
 };
 
@@ -216,7 +49,7 @@ type SearchResultItem =
       id: string;
       type: "portal";
       score: number;
-      matchedOn: "projectName" | "description";
+      matchedOn: "projectName" | "projectKey" | "description";
       portal: PortalInfo;
       projectName: string;
       projectKey: string;
@@ -350,11 +183,11 @@ export function LandingHeroBanner({
 
   const [iconMapping, setIconMapping] = useState<Record<string, string>>({});
 
+  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
     }, 300);
-
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
@@ -424,6 +257,7 @@ export function LandingHeroBanner({
     const fetchAllIcons = async () => {
       const allMappings: Record<string, string> = {};
 
+      // Fetch icons for each service desk in parallel
       await Promise.all(
         uniqueServiceDeskIds.map(async (serviceDeskId) => {
           const mapping = await fetchJsmRequestTypeIcons(serviceDeskId);
@@ -436,13 +270,14 @@ export function LandingHeroBanner({
       }
     };
 
-    void fetchAllIcons();
+    fetchAllIcons();
 
     return () => {
       cancelled = true;
     };
   }, [searchResults?.results]);
 
+  // Enrich request type results with icon URLs
   const enrichedRequestTypeResults = useMemo(() => {
     if (!searchResults?.results) return [];
     if (Object.keys(iconMapping).length === 0) return searchResults.results;
@@ -481,6 +316,7 @@ export function LandingHeroBanner({
           projectKey: portal.projectKey ?? "",
           description,
           normalizedProjectName: normalizeSearchText(portal.projectName),
+          normalizedProjectKey: normalizeSearchText(portal.projectKey),
           normalizedDescription: normalizeSearchText(description),
         };
       });
@@ -521,6 +357,16 @@ export function LandingHeroBanner({
     return index;
   }, [portalDocs]);
 
+  const portalKeyIndex = useMemo(() => {
+    const index = new Index({ tokenize: "forward" });
+    for (const doc of portalDocs) {
+      if (doc.normalizedProjectKey) {
+        index.add(doc.id, doc.normalizedProjectKey);
+      }
+    }
+    return index;
+  }, [portalDocs]);
+
   const portalDescriptionIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
     for (const doc of portalDocs) {
@@ -547,9 +393,10 @@ export function LandingHeroBanner({
 
     const resultsMap = new Map<string, SearchResultItem>();
 
-    const portalNameMatches = portalNameIndex.search(query, 20) as string[];
-    const portalDescriptionMatches = portalDescriptionIndex.search(query, 20) as string[];
-    const requestTypeMatches = requestTypeIndex.search(query, 20) as string[];
+    const portalNameMatches = portalNameIndex.search(query, { limit: 20 }) as string[];
+    const portalKeyMatches = portalKeyIndex.search(query, { limit: 20 }) as string[];
+    const portalDescriptionMatches = portalDescriptionIndex.search(query, { limit: 20 }) as string[];
+    const requestTypeMatches = requestTypeIndex.search(query, { limit: 20 }) as string[];
 
     for (const id of portalNameMatches) {
       const doc = portalDocsById.get(String(id));
@@ -568,6 +415,28 @@ export function LandingHeroBanner({
         projectKey: doc.projectKey,
         description: doc.description,
       });
+    }
+
+    for (const id of portalKeyMatches) {
+      const doc = portalDocsById.get(String(id));
+      if (!doc) continue;
+
+      const score = getFieldScore(query, doc.normalizedProjectKey, 2500, 400, 200, 90);
+      if (score <= 0) continue;
+
+      const existing = resultsMap.get(doc.id);
+      if (!existing || existing.score < score) {
+        resultsMap.set(doc.id, {
+          id: doc.id,
+          type: "portal",
+          score,
+          matchedOn: "projectKey",
+          portal: doc.portal,
+          projectName: doc.projectName,
+          projectKey: doc.projectKey,
+          description: doc.description,
+        });
+      }
     }
 
     for (const id of portalDescriptionMatches) {
@@ -627,6 +496,7 @@ export function LandingHeroBanner({
   }, [
     debouncedSearchTerm,
     portalNameIndex,
+    portalKeyIndex,
     portalDescriptionIndex,
     requestTypeIndex,
     portalDocsById,
@@ -706,7 +576,6 @@ export function LandingHeroBanner({
           <DialogHeader>
             <DialogTitle>Search Portals and Request Types</DialogTitle>
           </DialogHeader>
-
           <div className="relative mt-2">
             {isSearching ? (
               <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground animate-spin" />
@@ -773,12 +642,16 @@ export function LandingHeroBanner({
                             <Badge variant="outline" className="text-[10px]">
                               {item.matchedOn === "projectName"
                                 ? "Matched on project name"
-                                : "Matched on description"}
+                                : item.matchedOn === "projectKey"
+                                  ? "Matched on project key"
+                                  : "Matched on keyword"}
                             </Badge>
                           </div>
 
                           <div className="text-xs text-muted-foreground truncate mt-0.5">
-                            {item.projectKey}
+                            {item.matchedOn === "projectKey"
+                              ? highlightText(item.projectKey, debouncedSearchTerm)
+                              : item.projectKey}
                           </div>
 
                           {item.description && (
