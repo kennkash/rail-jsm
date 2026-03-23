@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Search, Loader2, FileText, ArrowRight, FolderTree } from "lucide-react";
-import { Index } from "flexsearch";
+import { Charset, Index } from "flexsearch";
 import { fetchJsmRequestTypeIcons } from "@/lib/api/jira-search-client";
 import { fetchProjects, type Project } from "@/lib/api/projects-client";
 import { buildRequestTypeUrl } from "@/types/router";
@@ -23,6 +23,7 @@ const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
 const HERO_BACKGROUND_IMAGE = "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 const SEARCH_LIMIT = 20;
+const FUZZY_SEARCH_LIMIT = 30;
 
 type LandingHeroBannerProps = {
   visiblePortals: PortalInfo[];
@@ -467,6 +468,19 @@ export function LandingHeroBanner({
     return index;
   }, [portalDocs]);
 
+  const portalNameFuzzyIndex = useMemo(() => {
+    const index = new Index({
+      tokenize: "forward",
+      encoder: Charset.LatinBalance,
+    });
+    for (const doc of portalDocs) {
+      if (doc.normalizedProjectName) {
+        index.add(doc.id, doc.normalizedProjectName);
+      }
+    }
+    return index;
+  }, [portalDocs]);
+
   const portalKeyIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
     for (const doc of portalDocs) {
@@ -487,6 +501,19 @@ export function LandingHeroBanner({
     return index;
   }, [portalDocs]);
 
+  const portalDescriptionFuzzyIndex = useMemo(() => {
+    const index = new Index({
+      tokenize: "forward",
+      encoder: Charset.LatinBalance,
+    });
+    for (const doc of portalDocs) {
+      if (doc.normalizedDescription) {
+        index.add(doc.id, doc.normalizedDescription);
+      }
+    }
+    return index;
+  }, [portalDocs]);
+
   const requestTypeNameIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
     for (const doc of requestTypeDocs) {
@@ -497,8 +524,34 @@ export function LandingHeroBanner({
     return index;
   }, [requestTypeDocs]);
 
+  const requestTypeNameFuzzyIndex = useMemo(() => {
+    const index = new Index({
+      tokenize: "forward",
+      encoder: Charset.LatinBalance,
+    });
+    for (const doc of requestTypeDocs) {
+      if (doc.normalizedRequestTypeName) {
+        index.add(doc.id, doc.normalizedRequestTypeName);
+      }
+    }
+    return index;
+  }, [requestTypeDocs]);
+
   const requestTypeProjectNameIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
+    for (const doc of requestTypeDocs) {
+      if (doc.normalizedProjectName) {
+        index.add(doc.id, doc.normalizedProjectName);
+      }
+    }
+    return index;
+  }, [requestTypeDocs]);
+
+  const requestTypeProjectNameFuzzyIndex = useMemo(() => {
+    const index = new Index({
+      tokenize: "forward",
+      encoder: Charset.LatinBalance,
+    });
     for (const doc of requestTypeDocs) {
       if (doc.normalizedProjectName) {
         index.add(doc.id, doc.normalizedProjectName);
@@ -522,143 +575,158 @@ export function LandingHeroBanner({
     const tokens = tokenizeQuery(debouncedSearchTerm).filter((token) => token.length >= 2);
     if (tokens.length === 0) return [];
 
-    const resultsMap = new Map<string, SearchResultItem>();
+    const buildResults = (useFuzzy: boolean) => {
+      const resultsMap = new Map<string, SearchResultItem>();
 
-    const portalCandidateIds = new Set<string>();
-    for (const token of tokens) {
-      (portalNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        portalCandidateIds.add(String(id))
-      );
-      (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        portalCandidateIds.add(String(id))
-      );
-      (portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        portalCandidateIds.add(String(id))
-      );
-    }
+      const portalCandidateIds = new Set<string>();
+      for (const token of tokens) {
+        const portalNameMatches = useFuzzy
+          ? (portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
+          : (portalNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
 
-    for (const id of portalCandidateIds) {
-      const doc = portalDocsById.get(id);
-      if (!doc) continue;
+        const portalDescriptionMatches = useFuzzy
+          ? (portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
+          : (portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
 
-      const fields = [
-        doc.normalizedProjectName,
-        doc.normalizedProjectKey,
-        doc.normalizedDescription,
-      ];
-
-      if (!matchesAllTokens(fields, query)) {
-        continue;
+        portalNameMatches.forEach((id) => portalCandidateIds.add(String(id)));
+        (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+          portalCandidateIds.add(String(id))
+        );
+        portalDescriptionMatches.forEach((id) => portalCandidateIds.add(String(id)));
       }
 
-      const projectNameScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
-      const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
-      const descriptionScore = getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
+      for (const id of portalCandidateIds) {
+        const doc = portalDocsById.get(id);
+        if (!doc) continue;
 
-      let matchedOn: "projectName" | "projectKey" | "description" = "projectName";
-      let score = projectNameScore;
+        const fields = [
+          doc.normalizedProjectName,
+          doc.normalizedProjectKey,
+          doc.normalizedDescription,
+        ];
 
-      if (projectKeyScore > score) {
-        matchedOn = "projectKey";
-        score = projectKeyScore;
+        if (!matchesAllTokens(fields, query)) {
+          continue;
+        }
+
+        const projectNameScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
+        const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
+        const descriptionScore = getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
+
+        let matchedOn: "projectName" | "projectKey" | "description" = "projectName";
+        let score = projectNameScore;
+
+        if (projectKeyScore > score) {
+          matchedOn = "projectKey";
+          score = projectKeyScore;
+        }
+
+        if (descriptionScore > score) {
+          matchedOn = "description";
+          score = descriptionScore;
+        }
+
+        if (score <= 0) continue;
+
+        resultsMap.set(doc.id, {
+          id: doc.id,
+          type: "portal",
+          score: useFuzzy ? score - 200 : score,
+          matchedOn,
+          portal: doc.portal,
+          projectName: doc.projectName,
+          projectKey: doc.projectKey,
+          description: doc.description,
+        });
       }
 
-      if (descriptionScore > score) {
-        matchedOn = "description";
-        score = descriptionScore;
+      const requestTypeCandidateIds = new Set<string>();
+      for (const token of tokens) {
+        const requestTypeNameMatches = useFuzzy
+          ? (requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
+          : (requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
+
+        const requestTypeProjectNameMatches = useFuzzy
+          ? (requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
+          : (requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
+
+        requestTypeNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
+        requestTypeProjectNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
+        (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+          requestTypeCandidateIds.add(String(id))
+        );
       }
 
-      if (score <= 0) continue;
+      for (const id of requestTypeCandidateIds) {
+        const doc = requestTypeDocsById.get(id);
+        if (!doc) continue;
 
-      resultsMap.set(doc.id, {
-        id: doc.id,
-        type: "portal",
-        score,
-        matchedOn,
-        portal: doc.portal,
-        projectName: doc.projectName,
-        projectKey: doc.projectKey,
-        description: doc.description,
-      });
-    }
+        const fields = [
+          doc.normalizedRequestTypeName,
+          doc.normalizedProjectName,
+          doc.normalizedProjectKey,
+        ];
 
-    const requestTypeCandidateIds = new Set<string>();
-    for (const token of tokens) {
-      (requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        requestTypeCandidateIds.add(String(id))
-      );
-      (requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        requestTypeCandidateIds.add(String(id))
-      );
-      (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-        requestTypeCandidateIds.add(String(id))
-      );
-    }
+        if (!matchesAllTokens(fields, query)) {
+          continue;
+        }
 
-    for (const id of requestTypeCandidateIds) {
-      const doc = requestTypeDocsById.get(id);
-      if (!doc) continue;
+        const requestTypeNameScore = getTokenAwareFieldScore(
+          tokens,
+          doc.normalizedRequestTypeName,
+          1000,
+          300,
+          150,
+          75
+        );
+        const projectNameScore = getTokenAwareFieldScore(
+          tokens,
+          doc.normalizedProjectName,
+          900,
+          250,
+          120,
+          60
+        );
+        const projectKeyScore = getTokenAwareFieldScore(
+          tokens,
+          doc.normalizedProjectKey,
+          850,
+          200,
+          100,
+          50
+        );
 
-      const fields = [
-        doc.normalizedRequestTypeName,
-        doc.normalizedProjectName,
-        doc.normalizedProjectKey,
-      ];
+        let matchedOn: "requestTypeName" | "projectName" | "projectKey" = "requestTypeName";
+        let score = requestTypeNameScore;
 
-      if (!matchesAllTokens(fields, query)) {
-        continue;
+        if (projectNameScore > score) {
+          matchedOn = "projectName";
+          score = projectNameScore;
+        }
+
+        if (projectKeyScore > score) {
+          matchedOn = "projectKey";
+          score = projectKeyScore;
+        }
+
+        if (score <= 0) continue;
+
+        resultsMap.set(doc.id, {
+          id: doc.id,
+          type: "requestType",
+          score: useFuzzy ? score - 200 : score,
+          matchedOn,
+          result: doc.result,
+        });
       }
 
-      const requestTypeNameScore = getTokenAwareFieldScore(
-        tokens,
-        doc.normalizedRequestTypeName,
-        1000,
-        300,
-        150,
-        75
-      );
-      const projectNameScore = getTokenAwareFieldScore(
-        tokens,
-        doc.normalizedProjectName,
-        900,
-        250,
-        120,
-        60
-      );
-      const projectKeyScore = getTokenAwareFieldScore(
-        tokens,
-        doc.normalizedProjectKey,
-        850,
-        200,
-        100,
-        50
-      );
+      return Array.from(resultsMap.values());
+    };
 
-      let matchedOn: "requestTypeName" | "projectName" | "projectKey" = "requestTypeName";
-      let score = requestTypeNameScore;
+    const exactResults = buildResults(false);
+    const finalResults = exactResults.length > 0 ? exactResults : buildResults(true);
 
-      if (projectNameScore > score) {
-        matchedOn = "projectName";
-        score = projectNameScore;
-      }
-
-      if (projectKeyScore > score) {
-        matchedOn = "projectKey";
-        score = projectKeyScore;
-      }
-
-      if (score <= 0) continue;
-
-      resultsMap.set(doc.id, {
-        id: doc.id,
-        type: "requestType",
-        score,
-        matchedOn,
-        result: doc.result,
-      });
-    }
-
-    return Array.from(resultsMap.values()).sort((a, b) => {
+    return finalResults.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
 
       if (a.type === "portal" && b.type === "requestType") return -1;
@@ -677,10 +745,14 @@ export function LandingHeroBanner({
   }, [
     debouncedSearchTerm,
     portalNameIndex,
+    portalNameFuzzyIndex,
     portalKeyIndex,
     portalDescriptionIndex,
+    portalDescriptionFuzzyIndex,
     requestTypeNameIndex,
+    requestTypeNameFuzzyIndex,
     requestTypeProjectNameIndex,
+    requestTypeProjectNameFuzzyIndex,
     requestTypeProjectKeyIndex,
     portalDocsById,
     requestTypeDocsById,
