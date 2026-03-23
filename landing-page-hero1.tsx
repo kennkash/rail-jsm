@@ -61,6 +61,7 @@ type SearchResultItem =
       projectName: string;
       projectKey: string;
       description: string;
+      fuzzyHighlightValue?: string;
     }
   | {
       id: string;
@@ -68,6 +69,7 @@ type SearchResultItem =
       score: number;
       matchedOn: "requestTypeName" | "projectName" | "projectKey";
       result: GlobalRequestTypeSearchResult;
+      fuzzyHighlightValue?: string;
     };
 
 function normalizeSearchText(value?: string): string {
@@ -151,6 +153,51 @@ function highlightText(text: string, query: string): ReactNode {
       )}
     </>
   );
+}
+
+function extractBestFuzzyHighlightValue(text: string, query: string): string | undefined {
+  if (!text?.trim()) return undefined;
+
+  const queryTokens = tokenizeQuery(query).filter((token) => token.length >= 2);
+  if (!queryTokens.length) return undefined;
+
+  const originalWords = text.split(/\s+/).filter(Boolean);
+  if (!originalWords.length) return undefined;
+
+  let bestWord: string | undefined;
+  let bestScore = -1;
+
+  for (const originalWord of originalWords) {
+    const normalizedWord = normalizeSearchText(originalWord);
+    if (!normalizedWord) continue;
+
+    let score = 0;
+
+    for (const queryToken of queryTokens) {
+      if (normalizedWord === queryToken) {
+        score += 100;
+      } else if (normalizedWord.startsWith(queryToken)) {
+        score += 75;
+      } else if (normalizedWord.includes(queryToken)) {
+        score += 50;
+      } else {
+        const sharedChars = [...new Set(queryToken)]
+          .filter((ch) => normalizedWord.includes(ch)).length;
+        score += sharedChars;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestWord = originalWord;
+    }
+  }
+
+  return bestWord;
+}
+
+function getHighlightQuery(rawQuery: string, fuzzyHighlightValue?: string): string {
+  return fuzzyHighlightValue?.trim() ? fuzzyHighlightValue : rawQuery;
 }
 
 function getHighlightedSnippet(text: string, query: string, radius = 55): ReactNode {
@@ -732,6 +779,13 @@ export function LandingHeroBanner({
           projectName: doc.projectName,
           projectKey: doc.projectKey,
           description: doc.description,
+          fuzzyHighlightValue: useFuzzy
+            ? matchedOn === "projectName"
+              ? extractBestFuzzyHighlightValue(doc.projectName, debouncedSearchTerm)
+              : matchedOn === "projectKey"
+                ? extractBestFuzzyHighlightValue(doc.projectKey, debouncedSearchTerm)
+                : extractBestFuzzyHighlightValue(doc.description, debouncedSearchTerm)
+            : undefined,
         });
       }
 
@@ -862,6 +916,13 @@ export function LandingHeroBanner({
           score: useFuzzy ? score - 200 : score,
           matchedOn,
           result: doc.result,
+          fuzzyHighlightValue: useFuzzy
+            ? matchedOn === "requestTypeName"
+              ? extractBestFuzzyHighlightValue(doc.result.requestType.name, debouncedSearchTerm)
+              : matchedOn === "projectName"
+                ? extractBestFuzzyHighlightValue(doc.result.projectName, debouncedSearchTerm)
+                : extractBestFuzzyHighlightValue(doc.result.projectKey, debouncedSearchTerm)
+            : undefined,
         });
       }
 
@@ -1032,7 +1093,13 @@ export function LandingHeroBanner({
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="font-medium text-sm text-foreground truncate">
                               {item.matchedOn === "projectName"
-                                ? highlightText(item.projectName, debouncedSearchTerm)
+                                ? highlightText(
+                                    item.projectName,
+                                    getHighlightQuery(
+                                      debouncedSearchTerm,
+                                      item.fuzzyHighlightValue
+                                    )
+                                  )
                                 : item.projectName}
                             </div>
 
@@ -1051,14 +1118,26 @@ export function LandingHeroBanner({
 
                           <div className="text-xs text-muted-foreground truncate mt-0.5">
                             {item.matchedOn === "projectKey"
-                              ? highlightText(item.projectKey, debouncedSearchTerm)
+                              ? highlightText(
+                                  item.projectKey,
+                                  getHighlightQuery(
+                                    debouncedSearchTerm,
+                                    item.fuzzyHighlightValue
+                                  )
+                                )
                               : item.projectKey}
                           </div>
 
                           {item.description && (
                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
                               {item.matchedOn === "description"
-                                ? getHighlightedSnippet(item.description, debouncedSearchTerm)
+                                ? getHighlightedSnippet(
+                                    item.description,
+                                    getHighlightQuery(
+                                      debouncedSearchTerm,
+                                      item.fuzzyHighlightValue
+                                    )
+                                  )
                                 : item.description}
                             </div>
                           )}
@@ -1105,7 +1184,13 @@ export function LandingHeroBanner({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="font-medium text-sm text-foreground truncate">
-                                {highlightText(result.requestType.name, debouncedSearchTerm)}
+                                {highlightText(
+                                  result.requestType.name,
+                                  getHighlightQuery(
+                                    debouncedSearchTerm,
+                                    item.fuzzyHighlightValue
+                                  )
+                                )}
                               </div>
 
                               <Badge variant="secondary" className="text-[10px]">
@@ -1115,9 +1200,21 @@ export function LandingHeroBanner({
 
                             <div className="text-xs text-muted-foreground truncate mt-0.5">
                               <>
-                                {highlightText(result.projectName, debouncedSearchTerm)}
+                                {highlightText(
+                                    result.projectName,
+                                    getHighlightQuery(
+                                      debouncedSearchTerm,
+                                      item.fuzzyHighlightValue
+                                    )
+                                  )}
                                 <span> (</span>
-                                {highlightText(result.projectKey, debouncedSearchTerm)}
+                                {highlightText(
+                                    result.projectKey,
+                                    getHighlightQuery(
+                                      debouncedSearchTerm,
+                                      item.fuzzyHighlightValue
+                                    )
+                                  )}
                                 <span>)</span>
                               </>
                             </div>
