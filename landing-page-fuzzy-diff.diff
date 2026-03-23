@@ -1,171 +1,212 @@
 --- a/frontend/components/landing/landing-page-hero1.tsx
 +++ b/frontend/components/landing/landing-page-hero1.tsx
 @@
- function getTokenAwareFieldScore(
-   tokens: string[],
-   value: string,
-   baseScore: number,
-   exactBonus: number,
-   startsWithBonus: number,
-   includesBonus: number
- ): number {
+ type SearchResultItem =
+   | {
+       id: string;
+       type: "portal";
+       score: number;
+       matchedOn: "projectName" | "projectKey" | "description";
+       portal: PortalInfo;
+       projectName: string;
+       projectKey: string;
+       description: string;
++      fuzzyHighlightValue?: string;
+     }
+   | {
+       id: string;
+       type: "requestType";
+       score: number;
+       matchedOn: "requestTypeName" | "projectName" | "projectKey";
+       result: GlobalRequestTypeSearchResult;
++      fuzzyHighlightValue?: string;
+     };
 @@
-   return score + matchedCount * 25;
+ function highlightText(text: string, query: string): ReactNode {
+   const parts = getTextPartsWithHighlights(text, query);
+@@
+   );
  }
 +
-+function getFuzzyTokenAwareFieldScore(
-+  tokens: string[],
-+  fieldValue: string,
-+  matchedTokenSet: Set<string> | undefined,
-+  baseScore: number,
-+  exactBonus: number,
-+  startsWithBonus: number,
-+  includesBonus: number
-+): number {
-+  if (!tokens.length || !fieldValue || !matchedTokenSet || matchedTokenSet.size === 0) {
-+    return 0;
-+  }
++function extractBestFuzzyHighlightValue(text: string, query: string): string | undefined {
++  if (!text?.trim()) return undefined;
 +
-+  let matchedCount = 0;
-+  let score = 0;
++  const queryTokens = tokenizeQuery(query).filter((token) => token.length >= 2);
++  if (!queryTokens.length) return undefined;
 +
-+  for (const token of tokens) {
-+    if (!matchedTokenSet.has(token)) continue;
++  const originalWords = text.split(/\s+/).filter(Boolean);
++  if (!originalWords.length) return undefined;
 +
-+    matchedCount += 1;
++  let bestWord: string | undefined;
++  let bestScore = -1;
 +
-+    if (fieldValue === token) {
-+      score += baseScore + exactBonus;
-+    } else if (fieldValue.startsWith(token)) {
-+      score += baseScore + startsWithBonus;
-+    } else if (fieldValue.includes(token)) {
-+      score += baseScore + includesBonus;
-+    } else {
-+      // Token matched through fuzzy index, but not exact string comparison.
-+      // Give it a reduced fuzzy score so exact matches still win.
-+      score += Math.max(1, Math.floor(baseScore * 0.55));
++  for (const originalWord of originalWords) {
++    const normalizedWord = normalizeSearchText(originalWord);
++    if (!normalizedWord) continue;
++
++    let score = 0;
++
++    for (const queryToken of queryTokens) {
++      if (normalizedWord === queryToken) {
++        score += 100;
++      } else if (normalizedWord.startsWith(queryToken)) {
++        score += 75;
++      } else if (normalizedWord.includes(queryToken)) {
++        score += 50;
++      } else {
++        const sharedChars = [...new Set(queryToken)]
++          .filter((ch) => normalizedWord.includes(ch)).length;
++        score += sharedChars;
++      }
++    }
++
++    if (score > bestScore) {
++      bestScore = score;
++      bestWord = originalWord;
 +    }
 +  }
 +
-+  if (matchedCount === 0) return 0;
++  return bestWord;
++}
 +
-+  return score + matchedCount * 25;
++function getHighlightQuery(rawQuery: string, fuzzyHighlightValue?: string): string {
++  return fuzzyHighlightValue?.trim() ? fuzzyHighlightValue : rawQuery;
 +}
 @@
-     const buildResults = (useFuzzy: boolean) => {
-       const resultsMap = new Map<string, SearchResultItem>();
+         resultsMap.set(doc.id, {
+           id: doc.id,
+           type: "portal",
+           score: useFuzzy ? score - 200 : score,
+           matchedOn,
+           portal: doc.portal,
+           projectName: doc.projectName,
+           projectKey: doc.projectKey,
+           description: doc.description,
++          fuzzyHighlightValue: useFuzzy
++            ? matchedOn === "projectName"
++              ? extractBestFuzzyHighlightValue(doc.projectName, debouncedSearchTerm)
++              : matchedOn === "projectKey"
++                ? extractBestFuzzyHighlightValue(doc.projectKey, debouncedSearchTerm)
++                : extractBestFuzzyHighlightValue(doc.description, debouncedSearchTerm)
++            : undefined,
+         });
 @@
-       for (const id of portalCandidateIds) {
-         const doc = portalDocsById.get(id);
-         if (!doc) continue;
+         resultsMap.set(doc.id, {
+           id: doc.id,
+           type: "requestType",
+           score: useFuzzy ? score - 200 : score,
+           matchedOn,
+           result: doc.result,
++          fuzzyHighlightValue: useFuzzy
++            ? matchedOn === "requestTypeName"
++              ? extractBestFuzzyHighlightValue(doc.result.requestType.name, debouncedSearchTerm)
++              : matchedOn === "projectName"
++                ? extractBestFuzzyHighlightValue(doc.result.projectName, debouncedSearchTerm)
++                : extractBestFuzzyHighlightValue(doc.result.projectKey, debouncedSearchTerm)
++            : undefined,
+         });
 @@
--        const projectNameScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
--        const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
--        const descriptionScore = getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
-+        const projectNameMatchedTokens = new Set(
-+          tokens.filter((token) =>
-+            (useFuzzy ? portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalNameIndex.search(token, { limit: SEARCH_LIMIT }))
-+              .map(String)
-+              .includes(doc.id)
-+          )
-+        );
-+
-+        const projectKeyMatchedTokens = new Set(
-+          tokens.filter((token) =>
-+            (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[])
-+              .map(String)
-+              .includes(doc.id)
-+          )
-+        );
-+
-+        const descriptionMatchedTokens = new Set(
-+          tokens.filter((token) =>
-+            (useFuzzy ? portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }))
-+              .map(String)
-+              .includes(doc.id)
-+          )
-+        );
-+
-+        const projectNameScore = useFuzzy
-+          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedProjectName, projectNameMatchedTokens, 3000, 500, 250, 100)
-+          : getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
-+
-+        const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
-+
-+        const descriptionScore = useFuzzy
-+          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedDescription, descriptionMatchedTokens, 2000, 250, 100, 50)
-+          : getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
+                             <div className="font-medium text-sm text-foreground truncate">
+                               {item.matchedOn === "projectName"
+-                                ? highlightText(item.projectName, debouncedSearchTerm)
++                                ? highlightText(
++                                    item.projectName,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )
+                                 : item.projectName}
+                             </div>
 @@
-       for (const id of requestTypeCandidateIds) {
-         const doc = requestTypeDocsById.get(id);
-         if (!doc) continue;
+                           <div className="text-xs text-muted-foreground truncate mt-0.5">
+                             {item.matchedOn === "projectKey"
+-                              ? highlightText(item.projectKey, debouncedSearchTerm)
++                              ? highlightText(
++                                  item.projectKey,
++                                  getHighlightQuery(
++                                    debouncedSearchTerm,
++                                    item.fuzzyHighlightValue
++                                  )
++                                )
+                               : item.projectKey}
+                           </div>
 @@
--        const requestTypeNameScore = getTokenAwareFieldScore(
--          tokens,
--          doc.normalizedRequestTypeName,
--          1000,
--          300,
--          150,
--          75
--        );
--        const projectNameScore = getTokenAwareFieldScore(
--          tokens,
--          doc.normalizedProjectName,
--          900,
--          250,
--          120,
--          60
--        );
-+        const requestTypeNameMatchedTokens = new Set(
-+          tokens.filter((token) =>
-+            (useFuzzy ? requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }))
-+              .map(String)
-+              .includes(doc.id)
-+          )
-+        );
-+
-+        const requestTypeProjectNameMatchedTokens = new Set(
-+          tokens.filter((token) =>
-+            (useFuzzy ? requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }))
-+              .map(String)
-+              .includes(doc.id)
-+          )
-+        );
-+
-+        const requestTypeNameScore = useFuzzy
-+          ? getFuzzyTokenAwareFieldScore(
-+              tokens,
-+              doc.normalizedRequestTypeName,
-+              requestTypeNameMatchedTokens,
-+              1000,
-+              300,
-+              150,
-+              75
-+            )
-+          : getTokenAwareFieldScore(
-+              tokens,
-+              doc.normalizedRequestTypeName,
-+              1000,
-+              300,
-+              150,
-+              75
-+            );
-+
-+        const projectNameScore = useFuzzy
-+          ? getFuzzyTokenAwareFieldScore(
-+              tokens,
-+              doc.normalizedProjectName,
-+              requestTypeProjectNameMatchedTokens,
-+              900,
-+              250,
-+              120,
-+              60
-+            )
-+          : getTokenAwareFieldScore(
-+              tokens,
-+              doc.normalizedProjectName,
-+              900,
-+              250,
-+              120,
-+              60
-+            );
+                           {item.description && (
+                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                               {item.matchedOn === "description"
+-                                ? getHighlightedSnippet(item.description, debouncedSearchTerm)
++                                ? getHighlightedSnippet(
++                                    item.description,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )
+                                 : item.description}
+                             </div>
+                           )}
+@@
+                               <div className="font-medium text-sm text-foreground truncate">
+-                                {highlightText(result.requestType.name, debouncedSearchTerm)}
++                                {highlightText(
++                                  result.requestType.name,
++                                  getHighlightQuery(
++                                    debouncedSearchTerm,
++                                    item.fuzzyHighlightValue
++                                  )
++                                )}
+                               </div>
+@@
+                             <div className="text-xs text-muted-foreground truncate mt-0.5">
+                               {item.matchedOn === "projectName" ? (
+                                 <>
+-                                  {highlightText(result.projectName, debouncedSearchTerm)}
++                                  {highlightText(
++                                    result.projectName,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )}
+                                   <span> (</span>
+                                   {result.projectKey}
+                                   <span>)</span>
+                                 </>
+                               ) : item.matchedOn === "projectKey" ? (
+                                 <>
+                                   {result.projectName}
+                                   <span> (</span>
+-                                  {highlightText(result.projectKey, debouncedSearchTerm)}
++                                  {highlightText(
++                                    result.projectKey,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )}
+                                   <span>)</span>
+                                 </>
+                               ) : (
+                                 <>
+-                                  {highlightText(result.projectName, debouncedSearchTerm)}
++                                  {highlightText(
++                                    result.projectName,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )}
+                                   <span> (</span>
+-                                  {highlightText(result.projectKey, debouncedSearchTerm)}
++                                  {highlightText(
++                                    result.projectKey,
++                                    getHighlightQuery(
++                                      debouncedSearchTerm,
++                                      item.fuzzyHighlightValue
++                                    )
++                                  )}
+                                   <span>)</span>
+                                 </>
+                               )}
+                             </div>
