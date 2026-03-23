@@ -206,6 +206,17 @@ function matchesAllTokens(fields: string[], query: string): boolean {
   return tokens.every((token) => fields.some((field) => field.includes(token)));
 }
 
+function matchesAllTokensWithIndexes(
+  tokenToCandidateIds: Map<string, Set<string>>,
+  docId: string,
+  query: string
+): boolean {
+  const tokens = tokenizeQuery(query).filter((token) => token.length >= 2);
+  if (!tokens.length) return false;
+
+  return tokens.every((token) => tokenToCandidateIds.get(token)?.has(docId) === true);
+}
+
 function getFieldScore(
   query: string,
   value: string,
@@ -579,6 +590,7 @@ export function LandingHeroBanner({
       const resultsMap = new Map<string, SearchResultItem>();
 
       const portalCandidateIds = new Set<string>();
+      const portalMatchesByToken = new Map<string, Set<string>>();
       for (const token of tokens) {
         const portalNameMatches = useFuzzy
           ? (portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
@@ -588,11 +600,19 @@ export function LandingHeroBanner({
           ? (portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
           : (portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
 
+        const tokenMatches = new Set<string>();
         portalNameMatches.forEach((id) => portalCandidateIds.add(String(id)));
-        (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-          portalCandidateIds.add(String(id))
-        );
+        portalNameMatches.forEach((id) => tokenMatches.add(String(id)));
+
+        (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) => {
+          portalCandidateIds.add(String(id));
+          tokenMatches.add(String(id));
+        });
+
         portalDescriptionMatches.forEach((id) => portalCandidateIds.add(String(id)));
+        portalDescriptionMatches.forEach((id) => tokenMatches.add(String(id)));
+
+        portalMatchesByToken.set(token, tokenMatches);
       }
 
       for (const id of portalCandidateIds) {
@@ -605,7 +625,13 @@ export function LandingHeroBanner({
           doc.normalizedDescription,
         ];
 
-        if (!matchesAllTokens(fields, query)) {
+        if (
+          !(
+            useFuzzy
+              ? matchesAllTokensWithIndexes(portalMatchesByToken, doc.id, query)
+              : matchesAllTokens(fields, query)
+          )
+        ) {
           continue;
         }
 
@@ -641,6 +667,7 @@ export function LandingHeroBanner({
       }
 
       const requestTypeCandidateIds = new Set<string>();
+      const requestTypeMatchesByToken = new Map<string, Set<string>>();
       for (const token of tokens) {
         const requestTypeNameMatches = useFuzzy
           ? (requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
@@ -650,11 +677,17 @@ export function LandingHeroBanner({
           ? (requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
           : (requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
 
+        const tokenMatches = new Set<string>();
         requestTypeNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
+        requestTypeNameMatches.forEach((id) => tokenMatches.add(String(id)));
         requestTypeProjectNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
-        (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
-          requestTypeCandidateIds.add(String(id))
-        );
+        requestTypeProjectNameMatches.forEach((id) => tokenMatches.add(String(id)));
+        (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) => {
+          requestTypeCandidateIds.add(String(id));
+          tokenMatches.add(String(id));
+        });
+
+        requestTypeMatchesByToken.set(token, tokenMatches);
       }
 
       for (const id of requestTypeCandidateIds) {
@@ -667,7 +700,13 @@ export function LandingHeroBanner({
           doc.normalizedProjectKey,
         ];
 
-        if (!matchesAllTokens(fields, query)) {
+        if (
+          !(
+            useFuzzy
+              ? matchesAllTokensWithIndexes(requestTypeMatchesByToken, doc.id, query)
+              : matchesAllTokens(fields, query)
+          )
+        ) {
           continue;
         }
 
