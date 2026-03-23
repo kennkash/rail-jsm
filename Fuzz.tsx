@@ -207,7 +207,7 @@ if (!tokens.length) return false;
 return tokens.every((token) => fields.some((field) => field.includes(token)));
 }
 
-// ─── Fuzzy / Levenshtein utilities ───────────────────────────────────────────
+// Fuzzy / Levenshtein utilities
 
 function levenshteinDistance(a: string, b: string): number {
 if (a === b) return 0;
@@ -228,48 +228,39 @@ prev.splice(0, prev.length, …curr);
 return prev[b.length];
 }
 
-/**
+// Returns the max edit distance tolerated for a token of a given length.
+// Tokens <= 3 chars are too short for fuzzy (too many false positives).
+// Tokens 4-5 chars tolerate 1 edit (e.g. “Jera” -> “Jira”).
+// Tokens 6+ chars tolerate 2 edits (e.g. “Kanbaord” -> “Kanboard”).
+function getFuzzyMaxDistance(tokenLength: number): number {
+if (tokenLength <= 3) return 0;
+if (tokenLength <= 5) return 1;
+return 2;
+}
 
-- Returns the max edit distance tolerated for a token of a given length.
-- Tokens ≤ 3 chars are too short for fuzzy (too many false positives).
-- Tokens 4–5 chars tolerate 1 edit (e.g. “Jera” → “Jira”).
-- Tokens 6+ chars tolerate 2 edits (e.g. “Kanbaord” → “Kanboard”).
-  */
-  function getFuzzyMaxDistance(tokenLength: number): number {
-  if (tokenLength <= 3) return 0;
-  if (tokenLength <= 5) return 1;
-  return 2;
-  }
+// Returns true if the token fuzzy-matches any whitespace-separated word in the field.
+// Falls back to exact substring first for performance.
+function fuzzyTokenMatchesField(token: string, field: string): boolean {
+if (field.includes(token)) return true;
+const maxDist = getFuzzyMaxDistance(token.length);
+if (maxDist === 0) return false;
+return field
+.split(” “)
+.some(
+(word) =>
+Math.abs(word.length - token.length) <= maxDist &&
+levenshteinDistance(token, word) <= maxDist
+);
+}
 
-/**
-
-- Returns true if the token fuzzy-matches any whitespace-separated word in the field.
-- Falls back to exact substring first for performance.
-  */
-  function fuzzyTokenMatchesField(token: string, field: string): boolean {
-  if (field.includes(token)) return true;
-  const maxDist = getFuzzyMaxDistance(token.length);
-  if (maxDist === 0) return false;
-  return field
-  .split(” “)
-  .some(
-  (word) =>
-  Math.abs(word.length - token.length) <= maxDist &&
-  levenshteinDistance(token, word) <= maxDist
-  );
-  }
-
-/**
-
-- Like matchesAllTokens, but also accepts fuzzy hits.
-- Returns how many tokens were matched only via fuzzy (for score penalisation).
-  */
-  function matchesAllTokensFuzzy(
-  fields: string[],
-  query: string
-  ): { matched: boolean; fuzzyCount: number } {
-  const tokens = tokenizeQuery(query).filter((t) => t.length >= 2);
-  if (!tokens.length) return { matched: false, fuzzyCount: 0 };
+// Like matchesAllTokens, but also accepts fuzzy hits.
+// Returns how many tokens were matched only via fuzzy (for score penalisation).
+function matchesAllTokensFuzzy(
+fields: string[],
+query: string
+): { matched: boolean; fuzzyCount: number } {
+const tokens = tokenizeQuery(query).filter((t) => t.length >= 2);
+if (!tokens.length) return { matched: false, fuzzyCount: 0 };
 
 let fuzzyCount = 0;
 
