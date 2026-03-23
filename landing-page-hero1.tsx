@@ -264,6 +264,45 @@ function getTokenAwareFieldScore(
   return score + matchedCount * 25;
 }
 
+function getFuzzyTokenAwareFieldScore(
+  tokens: string[],
+  fieldValue: string,
+  matchedTokenSet: Set<string> | undefined,
+  baseScore: number,
+  exactBonus: number,
+  startsWithBonus: number,
+  includesBonus: number
+): number {
+  if (!tokens.length || !fieldValue || !matchedTokenSet || matchedTokenSet.size === 0) {
+    return 0;
+  }
+
+  let matchedCount = 0;
+  let score = 0;
+
+  for (const token of tokens) {
+    if (!matchedTokenSet.has(token)) continue;
+
+    matchedCount += 1;
+
+    if (fieldValue === token) {
+      score += baseScore + exactBonus;
+    } else if (fieldValue.startsWith(token)) {
+      score += baseScore + startsWithBonus;
+    } else if (fieldValue.includes(token)) {
+      score += baseScore + includesBonus;
+    } else {
+      // Token matched through fuzzy index, but not exact string comparison.
+      // Give it a reduced fuzzy score so exact matches still win.
+      score += Math.max(1, Math.floor(baseScore * 0.55));
+    }
+  }
+
+  if (matchedCount === 0) return 0;
+
+  return score + matchedCount * 25;
+}
+
 export function LandingHeroBanner({
   visiblePortals,
   onPortalSelect,
@@ -635,9 +674,39 @@ export function LandingHeroBanner({
           continue;
         }
 
-        const projectNameScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
+        const projectNameMatchedTokens = new Set(
+          tokens.filter((token) =>
+            (useFuzzy ? portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalNameIndex.search(token, { limit: SEARCH_LIMIT }))
+              .map(String)
+              .includes(doc.id)
+          )
+        );
+
+        const projectKeyMatchedTokens = new Set(
+          tokens.filter((token) =>
+            (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[])
+              .map(String)
+              .includes(doc.id)
+          )
+        );
+
+        const descriptionMatchedTokens = new Set(
+          tokens.filter((token) =>
+            (useFuzzy ? portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }))
+              .map(String)
+              .includes(doc.id)
+          )
+        );
+
+        const projectNameScore = useFuzzy
+          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedProjectName, projectNameMatchedTokens, 3000, 500, 250, 100)
+          : getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
+
         const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
-        const descriptionScore = getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
+
+        const descriptionScore = useFuzzy
+          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedDescription, descriptionMatchedTokens, 2000, 250, 100, 50)
+          : getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
 
         let matchedOn: "projectName" | "projectKey" | "description" = "projectName";
         let score = projectNameScore;
@@ -710,22 +779,59 @@ export function LandingHeroBanner({
           continue;
         }
 
-        const requestTypeNameScore = getTokenAwareFieldScore(
-          tokens,
-          doc.normalizedRequestTypeName,
-          1000,
-          300,
-          150,
-          75
+        const requestTypeNameMatchedTokens = new Set(
+          tokens.filter((token) =>
+            (useFuzzy ? requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }))
+              .map(String)
+              .includes(doc.id)
+          )
         );
-        const projectNameScore = getTokenAwareFieldScore(
-          tokens,
-          doc.normalizedProjectName,
-          900,
-          250,
-          120,
-          60
+
+        const requestTypeProjectNameMatchedTokens = new Set(
+          tokens.filter((token) =>
+            (useFuzzy ? requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }))
+              .map(String)
+              .includes(doc.id)
+          )
         );
+
+        const requestTypeNameScore = useFuzzy
+          ? getFuzzyTokenAwareFieldScore(
+              tokens,
+              doc.normalizedRequestTypeName,
+              requestTypeNameMatchedTokens,
+              1000,
+              300,
+              150,
+              75
+            )
+          : getTokenAwareFieldScore(
+              tokens,
+              doc.normalizedRequestTypeName,
+              1000,
+              300,
+              150,
+              75
+            );
+
+        const projectNameScore = useFuzzy
+          ? getFuzzyTokenAwareFieldScore(
+              tokens,
+              doc.normalizedProjectName,
+              requestTypeProjectNameMatchedTokens,
+              900,
+              250,
+              120,
+              60
+            )
+          : getTokenAwareFieldScore(
+              tokens,
+              doc.normalizedProjectName,
+              900,
+              250,
+              120,
+              60
+            );
         const projectKeyScore = getTokenAwareFieldScore(
           tokens,
           doc.normalizedProjectKey,
