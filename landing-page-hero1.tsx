@@ -21,8 +21,7 @@ import type { PortalInfo } from "@/lib/api/portals-client";
 const HERO_TITLE = "Samsung Customer Request Portal";
 const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
-const HERO_BACKGROUND_IMAGE =
-  "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
+const HERO_BACKGROUND_IMAGE = "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 const SEARCH_LIMIT = 20;
 
 type LandingHeroBannerProps = {
@@ -351,7 +350,6 @@ export function LandingHeroBanner({
 
   useEffect(() => {
     if (!requestTypeResultsByToken.length) {
-      setIconMapping({});
       return;
     }
 
@@ -899,28 +897,12 @@ export function LandingHeroBanner({
                             </div>
 
                             <div className="text-xs text-muted-foreground truncate mt-0.5">
-                              {item.matchedOn === "projectName" ? (
-                                <>
-                                  {highlightText(result.projectName, debouncedSearchTerm)}
-                                  <span> (</span>
-                                  {result.projectKey}
-                                  <span>)</span>
-                                </>
-                              ) : item.matchedOn === "projectKey" ? (
-                                <>
-                                  {result.projectName}
-                                  <span> (</span>
-                                  {highlightText(result.projectKey, debouncedSearchTerm)}
-                                  <span>)</span>
-                                </>
-                              ) : (
-                                <>
-                                  {result.projectName}
-                                  <span> (</span>
-                                  {result.projectKey}
-                                  <span>)</span>
-                                </>
-                              )}
+                              <>
+                                {highlightText(result.projectName, debouncedSearchTerm)}
+                                <span> (</span>
+                                {highlightText(result.projectKey, debouncedSearchTerm)}
+                                <span>)</span>
+                              </>
                             </div>
                           </div>
 
