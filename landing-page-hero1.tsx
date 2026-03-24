@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Search, Loader2, FileText, ArrowRight, FolderTree } from "lucide-react";
-import { Charset, Index } from "flexsearch";
+import { Index } from "flexsearch";
+import { distance as levenshteinDistance } from "fastest-levenshtein";
 import { fetchJsmRequestTypeIcons } from "@/lib/api/jira-search-client";
 import { fetchProjects, type Project } from "@/lib/api/projects-client";
 import { buildRequestTypeUrl } from "@/types/router";
@@ -21,9 +22,14 @@ import type { PortalInfo } from "@/lib/api/portals-client";
 const HERO_TITLE = "Samsung Customer Request Portal";
 const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
-const HERO_BACKGROUND_IMAGE = "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
+const HERO_BACKGROUND_IMAGE =
+  "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 const SEARCH_LIMIT = 20;
-const FUZZY_SEARCH_LIMIT = 30;
+
+const FUZZY_MIN_TOKEN_LENGTH = 3;
+const FUZZY_MAX_EDIT_DISTANCE_SHORT = 1;
+const FUZZY_MAX_EDIT_DISTANCE_LONG = 2;
+const FUZZY_MIN_SIMILARITY = 0.72;
 
 type LandingHeroBannerProps = {
   visiblePortals: PortalInfo[];
@@ -61,7 +67,6 @@ type SearchResultItem =
       projectName: string;
       projectKey: string;
       description: string;
-      fuzzyHighlightValue?: string;
     }
   | {
       id: string;
@@ -69,7 +74,6 @@ type SearchResultItem =
       score: number;
       matchedOn: "requestTypeName" | "projectName" | "projectKey";
       result: GlobalRequestTypeSearchResult;
-      fuzzyHighlightValue?: string;
     };
 
 function normalizeSearchText(value?: string): string {
@@ -94,7 +98,337 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function getTextPartsWithHighlights(text: string, query: string): Array<{ text: string; highlight: boolean }> {
+function getMaxEditDistance(token: string): number {
+  if (token.length <= 4) return FUZZY_MAX_EDIT_DISTANCE_SHORT;
+  return FUZZY_MAX_EDIT_DISTANCE_LONG;
+}
+
+function getSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  const dist = levenshteinDistance(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  return maxLen === 0 ? 1 : 1 - dist / maxLen;
+}
+
+function fieldMatchesToken(field: string, token: string): boolean {
+  if (!field || !token) return false;
+
+  if (field.includes(token)) return true;
+
+  const fieldTokens = tokenizeQuery(field);
+
+  for (const fieldToken of fieldTokens) {
+    if (fieldToken.includes(token)) return true;
+
+    if (
+      token.length >= FUZZY_MIN_TOKEN_LENGTH &&
+      fieldToken.length >= FUZZY_MIN_TOKEN_LENGTH
+    ) {
+      const dist = levenshteinDistance(token, fieldToken);
+      const similarity = getSimilarity(token, fieldToken);
+
+      if (
+        dist <= getMaxEditDistance(token) &&
+        similarity >= FUZZY_MIN_SIMILARITY
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function matchesAllTokensFuzzy(fields: string[], query: string): boolean {
+  const tokens = tokenizeQuery(query);
+  if (!tokens.length) return false;
+
+  return tokens.every((token) =>
+    fields.some((field) => fieldMatchesToken(field, token))
+  );
+}
+
+function getBestFuzzyTokenScore(
+  queryTokens: string[],
+  fieldValue: string,
+  baseScore: number,
+  exactBonus: number,
+  prefixBonus: number,
+  includesBonus: number,
+  fuzzyBonus: number
+): number {
+  if (!queryTokens.length || !fieldValue) return 0;
+
+  const fieldTokens = tokenizeQuery(fieldValue);
+  if (!fieldTokens.length) return 0;
+
+  let matchedCount = 0;
+  let score = 0;
+
+  for (const queryToken of queryTokens) {
+    let bestTokenScore = 0;
+
+    for (const fieldToken of fieldTokens) {
+      if (fieldToken === queryToken) {
+        bestTokenScore = Math.max(bestTokenScore, baseScore + exactBonus);
+        continue;
+      }
+
+      if (fieldToken.startsWith(queryToken)) {
+        bestTokenScore = Math.max(bestTokenScore, baseScore + prefixBonus);
+        continue;
+      }
+
+      if (fieldToken.includes(queryToken)) {
+        bestTokenScore = Math.max(bestTokenScore, baseScore + includesBonus);
+        continue;
+      }
+
+      if (
+        queryToken.length >= FUZZY_MIN_TOKEN_LENGTH &&
+        fieldToken.length >= FUZZY_MIN_TOKEN_LENGTH
+      ) {
+        const dist = levenshteinDistance(queryToken, fieldToken);
+        const similarity = getSimilarity(queryToken, fieldToken);
+
+        if (
+          dist <= getMaxEditDistance(queryToken) &&
+          similarity >= FUZZY_MIN_SIMILARITY
+        ) {
+          const fuzzyScore =
+            baseScore + fuzzyBonus + Math.round(similarity * 40) - dist * 10;
+
+          bestTokenScore = Math.max(bestTokenScore, fuzzyScore);
+        }
+      }
+    }
+
+    if (bestTokenScore > 0) {
+      matchedCount += 1;
+      score += bestTokenScore;
+    }
+  }
+
+  if (matchedCount === 0) return 0;
+
+  return score + matchedCount * 20;
+}
+
+function addPortalFuzzyCandidates(
+  docs: PortalSearchDoc[],
+  tokens: string[],
+  candidateIds: Set<string>
+): void {
+  for (const doc of docs) {
+    const fields = [
+      doc.normalizedProjectName,
+      doc.normalizedProjectKey,
+      doc.normalizedDescription,
+    ];
+
+    const matched = tokens.every((token) =>
+      fields.some((field) => fieldMatchesToken(field, token))
+    );
+
+    if (matched) {
+      candidateIds.add(doc.id);
+    }
+  }
+}
+
+function addRequestTypeFuzzyCandidates(
+  docs: RequestTypeSearchDoc[],
+  tokens: string[],
+  candidateIds: Set<string>
+): void {
+  for (const doc of docs) {
+    const fields = [
+      doc.normalizedRequestTypeName,
+      doc.normalizedProjectName,
+      doc.normalizedProjectKey,
+    ];
+
+    const matched = tokens.every((token) =>
+      fields.some((field) => fieldMatchesToken(field, token))
+    );
+
+    if (matched) {
+      candidateIds.add(doc.id);
+    }
+  }
+}
+
+type HighlightRange = {
+  start: number;
+  end: number;
+};
+
+function getTextTokenRanges(text: string): Array<{ token: string; start: number; end: number }> {
+  const ranges: Array<{ token: string; start: number; end: number }> = [];
+  const regex = /\p{L}[\p{L}\p{N}]*/gu;
+
+  for (const match of text.matchAll(regex)) {
+    const token = match[0];
+    const start = match.index ?? 0;
+    const end = start + token.length;
+
+    ranges.push({
+      token,
+      start,
+      end,
+    });
+  }
+
+  return ranges;
+}
+
+function getBestHighlightRangeForToken(text: string, queryToken: string): HighlightRange | null {
+  if (!text?.trim() || !queryToken) return null;
+
+  const lowerText = text.toLowerCase();
+  const lowerQueryToken = queryToken.toLowerCase();
+
+  const exactIndex = lowerText.indexOf(lowerQueryToken);
+  if (exactIndex !== -1) {
+    return {
+      start: exactIndex,
+      end: exactIndex + queryToken.length,
+    };
+  }
+
+  const tokenRanges = getTextTokenRanges(text);
+
+  let best:
+    | {
+        start: number;
+        end: number;
+        score: number;
+      }
+    | null = null;
+
+  for (const range of tokenRanges) {
+    const normalizedFieldToken = normalizeSearchText(range.token);
+    if (!normalizedFieldToken) continue;
+
+    if (normalizedFieldToken === lowerQueryToken) {
+      return { start: range.start, end: range.end };
+    }
+
+    let score = -1;
+
+    if (normalizedFieldToken.startsWith(lowerQueryToken)) {
+      score = 1000 + normalizedFieldToken.length;
+    } else if (normalizedFieldToken.includes(lowerQueryToken)) {
+      score = 800 + normalizedFieldToken.length;
+    } else if (
+      lowerQueryToken.length >= FUZZY_MIN_TOKEN_LENGTH &&
+      normalizedFieldToken.length >= FUZZY_MIN_TOKEN_LENGTH
+    ) {
+      const dist = levenshteinDistance(lowerQueryToken, normalizedFieldToken);
+      const similarity = getSimilarity(lowerQueryToken, normalizedFieldToken);
+
+      if (
+        dist <= getMaxEditDistance(lowerQueryToken) &&
+        similarity >= FUZZY_MIN_SIMILARITY
+      ) {
+        score = 500 + Math.round(similarity * 100) - dist * 25;
+      }
+    }
+
+    if (score > -1 && (!best || score > best.score)) {
+      best = {
+        start: range.start,
+        end: range.end,
+        score,
+      };
+    }
+  }
+
+  return best ? { start: best.start, end: best.end } : null;
+}
+
+function mergeHighlightRanges(ranges: HighlightRange[]): HighlightRange[] {
+  if (!ranges.length) return [];
+
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: HighlightRange[] = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    const current = sorted[i];
+    const last = merged[merged.length - 1];
+
+    if (current.start <= last.end) {
+      last.end = Math.max(last.end, current.end);
+    } else {
+      merged.push({ ...current });
+    }
+  }
+
+  return merged;
+}
+
+function getFuzzyHighlightRanges(text: string, query: string): HighlightRange[] {
+  if (!text?.trim()) return [];
+
+  const queryTokens = tokenizeQuery(query).filter(Boolean);
+  if (!queryTokens.length) return [];
+
+  const ranges = queryTokens
+    .map((token) => getBestHighlightRangeForToken(text, token))
+    .filter((range): range is HighlightRange => range !== null);
+
+  return mergeHighlightRanges(ranges);
+}
+
+function getTextPartsWithFuzzyHighlights(
+  text: string,
+  query: string
+): Array<{ text: string; highlight: boolean }> {
+  if (!text?.trim()) {
+    return [{ text, highlight: false }];
+  }
+
+  const ranges = getFuzzyHighlightRanges(text, query);
+  if (!ranges.length) {
+    return [{ text, highlight: false }];
+  }
+
+  const parts: Array<{ text: string; highlight: boolean }> = [];
+  let cursor = 0;
+
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      parts.push({
+        text: text.slice(cursor, range.start),
+        highlight: false,
+      });
+    }
+
+    parts.push({
+      text: text.slice(range.start, range.end),
+      highlight: true,
+    });
+
+    cursor = range.end;
+  }
+
+  if (cursor < text.length) {
+    parts.push({
+      text: text.slice(cursor),
+      highlight: false,
+    });
+  }
+
+  return parts;
+}
+
+
+function getTextPartsWithHighlights(
+  text: string,
+  query: string
+): Array<{ text: string; highlight: boolean }> {
   if (!text?.trim()) {
     return [{ text, highlight: false }];
   }
@@ -138,7 +472,7 @@ function getTextPartsWithHighlights(text: string, query: string): Array<{ text: 
 }
 
 function highlightText(text: string, query: string): ReactNode {
-  const parts = getTextPartsWithHighlights(text, query);
+  const parts = getTextPartsWithFuzzyHighlights(text, query);
 
   return (
     <>
@@ -155,83 +489,15 @@ function highlightText(text: string, query: string): ReactNode {
   );
 }
 
-function extractBestFuzzyHighlightValue(text: string, query: string): string | undefined {
-  if (!text?.trim()) return undefined;
-
-  const queryTokens = tokenizeQuery(query).filter((token) => token.length >= 2);
-  if (!queryTokens.length) return undefined;
-
-  const originalWords = text.split(/\s+/).filter(Boolean);
-  if (!originalWords.length) return undefined;
-
-  let bestWord: string | undefined;
-  let bestScore = -1;
-
-  for (const originalWord of originalWords) {
-    const normalizedWord = normalizeSearchText(originalWord);
-    if (!normalizedWord) continue;
-
-    let score = 0;
-
-    for (const queryToken of queryTokens) {
-      if (normalizedWord === queryToken) {
-        score += 100;
-      } else if (normalizedWord.startsWith(queryToken)) {
-        score += 75;
-      } else if (normalizedWord.includes(queryToken)) {
-        score += 50;
-      } else {
-        const sharedChars = [...new Set(queryToken)]
-          .filter((ch) => normalizedWord.includes(ch)).length;
-        score += sharedChars;
-      }
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestWord = originalWord;
-    }
-  }
-
-  return bestWord;
-}
-
-function getHighlightQuery(rawQuery: string, fuzzyHighlightValue?: string): string {
-  return fuzzyHighlightValue?.trim() ? fuzzyHighlightValue : rawQuery;
-}
-
 function getHighlightedSnippet(text: string, query: string, radius = 55): ReactNode {
   if (!text?.trim()) return text;
 
-  const tokens = tokenizeQuery(query);
-  if (!tokens.length) return text;
+  const ranges = getFuzzyHighlightRanges(text, query);
+  if (!ranges.length) return text;
 
-  const normalizedText = normalizeSearchText(text);
-
-  let firstMatchIndex = -1;
-  for (const token of tokens) {
-    const idx = normalizedText.indexOf(token);
-    if (idx !== -1 && (firstMatchIndex === -1 || idx < firstMatchIndex)) {
-      firstMatchIndex = idx;
-    }
-  }
-
-  if (firstMatchIndex === -1) {
-    return text;
-  }
-
-  const searchRegex = new RegExp(tokens.map(escapeRegExp).join("|"), "i");
-  const visibleMatch = text.match(searchRegex);
-
-  if (!visibleMatch || visibleMatch.index == null) {
-    return highlightText(text, query);
-  }
-
-  const matchStart = visibleMatch.index;
-  const matchEnd = matchStart + visibleMatch[0].length;
-
-  const start = Math.max(0, matchStart - radius);
-  const end = Math.min(text.length, matchEnd + radius);
+  const firstRange = ranges[0];
+  const start = Math.max(0, firstRange.start - radius);
+  const end = Math.min(text.length, firstRange.end + radius);
 
   const prefix = start > 0 ? "…" : "";
   const suffix = end < text.length ? "…" : "";
@@ -244,110 +510,6 @@ function getHighlightedSnippet(text: string, query: string, radius = 55): ReactN
       {suffix}
     </>
   );
-}
-
-function matchesAllTokens(fields: string[], query: string): boolean {
-  const tokens = tokenizeQuery(query);
-  if (!tokens.length) return false;
-
-  return tokens.every((token) => fields.some((field) => field.includes(token)));
-}
-
-function matchesAllTokensWithIndexes(
-  tokenToCandidateIds: Map<string, Set<string>>,
-  docId: string,
-  query: string
-): boolean {
-  const tokens = tokenizeQuery(query).filter((token) => token.length >= 2);
-  if (!tokens.length) return false;
-
-  return tokens.every((token) => tokenToCandidateIds.get(token)?.has(docId) === true);
-}
-
-function getFieldScore(
-  query: string,
-  value: string,
-  baseScore: number,
-  exactBonus: number,
-  startsWithBonus: number,
-  includesBonus: number
-): number {
-  if (!query || !value) return 0;
-  if (value === query) return baseScore + exactBonus;
-  if (value.startsWith(query)) return baseScore + startsWithBonus;
-  if (value.includes(query)) return baseScore + includesBonus;
-  return 0;
-}
-
-function getTokenAwareFieldScore(
-  tokens: string[],
-  value: string,
-  baseScore: number,
-  exactBonus: number,
-  startsWithBonus: number,
-  includesBonus: number
-): number {
-  if (!tokens.length || !value) return 0;
-
-  let matchedCount = 0;
-  let score = 0;
-
-  for (const token of tokens) {
-    if (value === token) {
-      score += baseScore + exactBonus;
-      matchedCount += 1;
-    } else if (value.startsWith(token)) {
-      score += baseScore + startsWithBonus;
-      matchedCount += 1;
-    } else if (value.includes(token)) {
-      score += baseScore + includesBonus;
-      matchedCount += 1;
-    }
-  }
-
-  if (matchedCount === 0) return 0;
-
-  // Reward fields that satisfy more of the query tokens.
-  return score + matchedCount * 25;
-}
-
-function getFuzzyTokenAwareFieldScore(
-  tokens: string[],
-  fieldValue: string,
-  matchedTokenSet: Set<string> | undefined,
-  baseScore: number,
-  exactBonus: number,
-  startsWithBonus: number,
-  includesBonus: number
-): number {
-  if (!tokens.length || !fieldValue || !matchedTokenSet || matchedTokenSet.size === 0) {
-    return 0;
-  }
-
-  let matchedCount = 0;
-  let score = 0;
-
-  for (const token of tokens) {
-    if (!matchedTokenSet.has(token)) continue;
-
-    matchedCount += 1;
-
-    if (fieldValue === token) {
-      score += baseScore + exactBonus;
-    } else if (fieldValue.startsWith(token)) {
-      score += baseScore + startsWithBonus;
-    } else if (fieldValue.includes(token)) {
-      score += baseScore + includesBonus;
-    } else {
-      // Token matched through fuzzy index, but not exact string comparison.
-      // Give it a reduced fuzzy score so exact matches still win.
-      score += Math.max(1, Math.floor(baseScore * 0.55));
-    }
-  }
-
-  if (matchedCount === 0) return 0;
-
-  return score + matchedCount * 25;
 }
 
 export function LandingHeroBanner({
@@ -565,19 +727,6 @@ export function LandingHeroBanner({
     return index;
   }, [portalDocs]);
 
-  const portalNameFuzzyIndex = useMemo(() => {
-    const index = new Index({
-      tokenize: "forward",
-      encoder: Charset.LatinBalance,
-    });
-    for (const doc of portalDocs) {
-      if (doc.normalizedProjectName) {
-        index.add(doc.id, doc.normalizedProjectName);
-      }
-    }
-    return index;
-  }, [portalDocs]);
-
   const portalKeyIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
     for (const doc of portalDocs) {
@@ -598,19 +747,6 @@ export function LandingHeroBanner({
     return index;
   }, [portalDocs]);
 
-  const portalDescriptionFuzzyIndex = useMemo(() => {
-    const index = new Index({
-      tokenize: "forward",
-      encoder: Charset.LatinBalance,
-    });
-    for (const doc of portalDocs) {
-      if (doc.normalizedDescription) {
-        index.add(doc.id, doc.normalizedDescription);
-      }
-    }
-    return index;
-  }, [portalDocs]);
-
   const requestTypeNameIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
     for (const doc of requestTypeDocs) {
@@ -621,34 +757,8 @@ export function LandingHeroBanner({
     return index;
   }, [requestTypeDocs]);
 
-  const requestTypeNameFuzzyIndex = useMemo(() => {
-    const index = new Index({
-      tokenize: "forward",
-      encoder: Charset.LatinBalance,
-    });
-    for (const doc of requestTypeDocs) {
-      if (doc.normalizedRequestTypeName) {
-        index.add(doc.id, doc.normalizedRequestTypeName);
-      }
-    }
-    return index;
-  }, [requestTypeDocs]);
-
   const requestTypeProjectNameIndex = useMemo(() => {
     const index = new Index({ tokenize: "forward" });
-    for (const doc of requestTypeDocs) {
-      if (doc.normalizedProjectName) {
-        index.add(doc.id, doc.normalizedProjectName);
-      }
-    }
-    return index;
-  }, [requestTypeDocs]);
-
-  const requestTypeProjectNameFuzzyIndex = useMemo(() => {
-    const index = new Index({
-      tokenize: "forward",
-      encoder: Charset.LatinBalance,
-    });
     for (const doc of requestTypeDocs) {
       if (doc.normalizedProjectName) {
         index.add(doc.id, doc.normalizedProjectName);
@@ -672,267 +782,182 @@ export function LandingHeroBanner({
     const tokens = tokenizeQuery(debouncedSearchTerm).filter((token) => token.length >= 2);
     if (tokens.length === 0) return [];
 
-    const buildResults = (useFuzzy: boolean) => {
-      const resultsMap = new Map<string, SearchResultItem>();
+    const resultsMap = new Map<string, SearchResultItem>();
 
-      const portalCandidateIds = new Set<string>();
-      const portalMatchesByToken = new Map<string, Set<string>>();
-      for (const token of tokens) {
-        const portalNameMatches = useFuzzy
-          ? (portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
-          : (portalNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
+    const portalCandidateIds = new Set<string>();
+    for (const token of tokens) {
+      (portalNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        portalCandidateIds.add(String(id))
+      );
+      (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        portalCandidateIds.add(String(id))
+      );
+      (portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        portalCandidateIds.add(String(id))
+      );
+    }
 
-        const portalDescriptionMatches = useFuzzy
-          ? (portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
-          : (portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
+    if (portalCandidateIds.size < SEARCH_LIMIT) {
+      addPortalFuzzyCandidates(portalDocs, tokens, portalCandidateIds);
+    }
 
-        const tokenMatches = new Set<string>();
-        portalNameMatches.forEach((id) => portalCandidateIds.add(String(id)));
-        portalNameMatches.forEach((id) => tokenMatches.add(String(id)));
+    for (const id of portalCandidateIds) {
+      const doc = portalDocsById.get(id);
+      if (!doc) continue;
 
-        (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) => {
-          portalCandidateIds.add(String(id));
-          tokenMatches.add(String(id));
-        });
+      const fields = [
+        doc.normalizedProjectName,
+        doc.normalizedProjectKey,
+        doc.normalizedDescription,
+      ];
 
-        portalDescriptionMatches.forEach((id) => portalCandidateIds.add(String(id)));
-        portalDescriptionMatches.forEach((id) => tokenMatches.add(String(id)));
-
-        portalMatchesByToken.set(token, tokenMatches);
+      if (!matchesAllTokensFuzzy(fields, query)) {
+        continue;
       }
 
-      for (const id of portalCandidateIds) {
-        const doc = portalDocsById.get(id);
-        if (!doc) continue;
+      const projectNameScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedProjectName,
+        3000,
+        500,
+        250,
+        100,
+        40
+      );
 
-        const fields = [
-          doc.normalizedProjectName,
-          doc.normalizedProjectKey,
-          doc.normalizedDescription,
-        ];
+      const projectKeyScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedProjectKey,
+        2500,
+        400,
+        200,
+        90,
+        35
+      );
 
-        if (
-          !(
-            useFuzzy
-              ? matchesAllTokensWithIndexes(portalMatchesByToken, doc.id, query)
-              : matchesAllTokens(fields, query)
-          )
-        ) {
-          continue;
-        }
+      const descriptionScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedDescription,
+        2000,
+        250,
+        100,
+        50,
+        20
+      );
 
-        const projectNameMatchedTokens = new Set(
-          tokens.filter((token) =>
-            (useFuzzy ? portalNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalNameIndex.search(token, { limit: SEARCH_LIMIT }))
-              .map(String)
-              .includes(doc.id)
-          )
-        );
+      let matchedOn: "projectName" | "projectKey" | "description" = "projectName";
+      let score = projectNameScore;
 
-        const projectKeyMatchedTokens = new Set(
-          tokens.filter((token) =>
-            (portalKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[])
-              .map(String)
-              .includes(doc.id)
-          )
-        );
-
-        const descriptionMatchedTokens = new Set(
-          tokens.filter((token) =>
-            (useFuzzy ? portalDescriptionFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : portalDescriptionIndex.search(token, { limit: SEARCH_LIMIT }))
-              .map(String)
-              .includes(doc.id)
-          )
-        );
-
-        const projectNameScore = useFuzzy
-          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedProjectName, projectNameMatchedTokens, 3000, 500, 250, 100)
-          : getTokenAwareFieldScore(tokens, doc.normalizedProjectName, 3000, 500, 250, 100);
-
-        const projectKeyScore = getTokenAwareFieldScore(tokens, doc.normalizedProjectKey, 2500, 400, 200, 90);
-
-        const descriptionScore = useFuzzy
-          ? getFuzzyTokenAwareFieldScore(tokens, doc.normalizedDescription, descriptionMatchedTokens, 2000, 250, 100, 50)
-          : getTokenAwareFieldScore(tokens, doc.normalizedDescription, 2000, 250, 100, 50);
-
-        let matchedOn: "projectName" | "projectKey" | "description" = "projectName";
-        let score = projectNameScore;
-
-        if (projectKeyScore > score) {
-          matchedOn = "projectKey";
-          score = projectKeyScore;
-        }
-
-        if (descriptionScore > score) {
-          matchedOn = "description";
-          score = descriptionScore;
-        }
-
-        if (score <= 0) continue;
-
-        resultsMap.set(doc.id, {
-          id: doc.id,
-          type: "portal",
-          score: useFuzzy ? score - 200 : score,
-          matchedOn,
-          portal: doc.portal,
-          projectName: doc.projectName,
-          projectKey: doc.projectKey,
-          description: doc.description,
-          fuzzyHighlightValue: useFuzzy
-            ? matchedOn === "projectName"
-              ? extractBestFuzzyHighlightValue(doc.projectName, debouncedSearchTerm)
-              : matchedOn === "projectKey"
-                ? extractBestFuzzyHighlightValue(doc.projectKey, debouncedSearchTerm)
-                : extractBestFuzzyHighlightValue(doc.description, debouncedSearchTerm)
-            : undefined,
-        });
+      if (projectKeyScore > score) {
+        matchedOn = "projectKey";
+        score = projectKeyScore;
       }
 
-      const requestTypeCandidateIds = new Set<string>();
-      const requestTypeMatchesByToken = new Map<string, Set<string>>();
-      for (const token of tokens) {
-        const requestTypeNameMatches = useFuzzy
-          ? (requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
-          : (requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
-
-        const requestTypeProjectNameMatches = useFuzzy
-          ? (requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) as string[])
-          : (requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]);
-
-        const tokenMatches = new Set<string>();
-        requestTypeNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
-        requestTypeNameMatches.forEach((id) => tokenMatches.add(String(id)));
-        requestTypeProjectNameMatches.forEach((id) => requestTypeCandidateIds.add(String(id)));
-        requestTypeProjectNameMatches.forEach((id) => tokenMatches.add(String(id)));
-        (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) => {
-          requestTypeCandidateIds.add(String(id));
-          tokenMatches.add(String(id));
-        });
-
-        requestTypeMatchesByToken.set(token, tokenMatches);
+      if (descriptionScore > score) {
+        matchedOn = "description";
+        score = descriptionScore;
       }
 
-      for (const id of requestTypeCandidateIds) {
-        const doc = requestTypeDocsById.get(id);
-        if (!doc) continue;
+      if (score <= 0) continue;
 
-        const fields = [
-          doc.normalizedRequestTypeName,
-          doc.normalizedProjectName,
-          doc.normalizedProjectKey,
-        ];
+      resultsMap.set(doc.id, {
+        id: doc.id,
+        type: "portal",
+        score,
+        matchedOn,
+        portal: doc.portal,
+        projectName: doc.projectName,
+        projectKey: doc.projectKey,
+        description: doc.description,
+      });
+    }
 
-        if (
-          !(
-            useFuzzy
-              ? matchesAllTokensWithIndexes(requestTypeMatchesByToken, doc.id, query)
-              : matchesAllTokens(fields, query)
-          )
-        ) {
-          continue;
-        }
+    const requestTypeCandidateIds = new Set<string>();
+    for (const token of tokens) {
+      (requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        requestTypeCandidateIds.add(String(id))
+      );
+      (requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        requestTypeCandidateIds.add(String(id))
+      );
+      (requestTypeProjectKeyIndex.search(token, { limit: SEARCH_LIMIT }) as string[]).forEach((id) =>
+        requestTypeCandidateIds.add(String(id))
+      );
+    }
 
-        const requestTypeNameMatchedTokens = new Set(
-          tokens.filter((token) =>
-            (useFuzzy ? requestTypeNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeNameIndex.search(token, { limit: SEARCH_LIMIT }))
-              .map(String)
-              .includes(doc.id)
-          )
-        );
+    if (requestTypeCandidateIds.size < SEARCH_LIMIT) {
+      addRequestTypeFuzzyCandidates(requestTypeDocs, tokens, requestTypeCandidateIds);
+    }
 
-        const requestTypeProjectNameMatchedTokens = new Set(
-          tokens.filter((token) =>
-            (useFuzzy ? requestTypeProjectNameFuzzyIndex.search(token, { limit: FUZZY_SEARCH_LIMIT }) : requestTypeProjectNameIndex.search(token, { limit: SEARCH_LIMIT }))
-              .map(String)
-              .includes(doc.id)
-          )
-        );
+    for (const id of requestTypeCandidateIds) {
+      const doc = requestTypeDocsById.get(id);
+      if (!doc) continue;
 
-        const requestTypeNameScore = useFuzzy
-          ? getFuzzyTokenAwareFieldScore(
-              tokens,
-              doc.normalizedRequestTypeName,
-              requestTypeNameMatchedTokens,
-              1000,
-              300,
-              150,
-              75
-            )
-          : getTokenAwareFieldScore(
-              tokens,
-              doc.normalizedRequestTypeName,
-              1000,
-              300,
-              150,
-              75
-            );
+      const fields = [
+        doc.normalizedRequestTypeName,
+        doc.normalizedProjectName,
+        doc.normalizedProjectKey,
+      ];
 
-        const projectNameScore = useFuzzy
-          ? getFuzzyTokenAwareFieldScore(
-              tokens,
-              doc.normalizedProjectName,
-              requestTypeProjectNameMatchedTokens,
-              900,
-              250,
-              120,
-              60
-            )
-          : getTokenAwareFieldScore(
-              tokens,
-              doc.normalizedProjectName,
-              900,
-              250,
-              120,
-              60
-            );
-        const projectKeyScore = getTokenAwareFieldScore(
-          tokens,
-          doc.normalizedProjectKey,
-          850,
-          200,
-          100,
-          50
-        );
-
-        let matchedOn: "requestTypeName" | "projectName" | "projectKey" = "requestTypeName";
-        let score = requestTypeNameScore;
-
-        if (projectNameScore > score) {
-          matchedOn = "projectName";
-          score = projectNameScore;
-        }
-
-        if (projectKeyScore > score) {
-          matchedOn = "projectKey";
-          score = projectKeyScore;
-        }
-
-        if (score <= 0) continue;
-
-        resultsMap.set(doc.id, {
-          id: doc.id,
-          type: "requestType",
-          score: useFuzzy ? score - 200 : score,
-          matchedOn,
-          result: doc.result,
-          fuzzyHighlightValue: useFuzzy
-            ? matchedOn === "requestTypeName"
-              ? extractBestFuzzyHighlightValue(doc.result.requestType.name, debouncedSearchTerm)
-              : matchedOn === "projectName"
-                ? extractBestFuzzyHighlightValue(doc.result.projectName, debouncedSearchTerm)
-                : extractBestFuzzyHighlightValue(doc.result.projectKey, debouncedSearchTerm)
-            : undefined,
-        });
+      if (!matchesAllTokensFuzzy(fields, query)) {
+        continue;
       }
 
-      return Array.from(resultsMap.values());
-    };
+      const requestTypeNameScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedRequestTypeName,
+        1000,
+        300,
+        150,
+        75,
+        25
+      );
 
-    const exactResults = buildResults(false);
-    const finalResults = exactResults.length > 0 ? exactResults : buildResults(true);
+      const projectNameScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedProjectName,
+        900,
+        250,
+        120,
+        60,
+        20
+      );
 
-    return finalResults.sort((a, b) => {
+      const projectKeyScore = getBestFuzzyTokenScore(
+        tokens,
+        doc.normalizedProjectKey,
+        850,
+        200,
+        100,
+        50,
+        15
+      );
+
+      let matchedOn: "requestTypeName" | "projectName" | "projectKey" = "requestTypeName";
+      let score = requestTypeNameScore;
+
+      if (projectNameScore > score) {
+        matchedOn = "projectName";
+        score = projectNameScore;
+      }
+
+      if (projectKeyScore > score) {
+        matchedOn = "projectKey";
+        score = projectKeyScore;
+      }
+
+      if (score <= 0) continue;
+
+      resultsMap.set(doc.id, {
+        id: doc.id,
+        type: "requestType",
+        score,
+        matchedOn,
+        result: doc.result,
+      });
+    }
+
+    return Array.from(resultsMap.values()).sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
 
       if (a.type === "portal" && b.type === "requestType") return -1;
@@ -951,15 +976,13 @@ export function LandingHeroBanner({
   }, [
     debouncedSearchTerm,
     portalNameIndex,
-    portalNameFuzzyIndex,
     portalKeyIndex,
     portalDescriptionIndex,
-    portalDescriptionFuzzyIndex,
     requestTypeNameIndex,
-    requestTypeNameFuzzyIndex,
     requestTypeProjectNameIndex,
-    requestTypeProjectNameFuzzyIndex,
     requestTypeProjectKeyIndex,
+    portalDocs,
+    requestTypeDocs,
     portalDocsById,
     requestTypeDocsById,
   ]);
@@ -1093,13 +1116,7 @@ export function LandingHeroBanner({
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="font-medium text-sm text-foreground truncate">
                               {item.matchedOn === "projectName"
-                                ? highlightText(
-                                    item.projectName,
-                                    getHighlightQuery(
-                                      debouncedSearchTerm,
-                                      item.fuzzyHighlightValue
-                                    )
-                                  )
+                                ? highlightText(item.projectName, debouncedSearchTerm)
                                 : item.projectName}
                             </div>
 
@@ -1118,26 +1135,14 @@ export function LandingHeroBanner({
 
                           <div className="text-xs text-muted-foreground truncate mt-0.5">
                             {item.matchedOn === "projectKey"
-                              ? highlightText(
-                                  item.projectKey,
-                                  getHighlightQuery(
-                                    debouncedSearchTerm,
-                                    item.fuzzyHighlightValue
-                                  )
-                                )
+                              ? highlightText(item.projectKey, debouncedSearchTerm)
                               : item.projectKey}
                           </div>
 
                           {item.description && (
                             <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
                               {item.matchedOn === "description"
-                                ? getHighlightedSnippet(
-                                    item.description,
-                                    getHighlightQuery(
-                                      debouncedSearchTerm,
-                                      item.fuzzyHighlightValue
-                                    )
-                                  )
+                                ? getHighlightedSnippet(item.description, debouncedSearchTerm)
                                 : item.description}
                             </div>
                           )}
@@ -1184,13 +1189,7 @@ export function LandingHeroBanner({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <div className="font-medium text-sm text-foreground truncate">
-                                {highlightText(
-                                  result.requestType.name,
-                                  getHighlightQuery(
-                                    debouncedSearchTerm,
-                                    item.fuzzyHighlightValue
-                                  )
-                                )}
+                                {highlightText(result.requestType.name, debouncedSearchTerm)}
                               </div>
 
                               <Badge variant="secondary" className="text-[10px]">
@@ -1200,21 +1199,9 @@ export function LandingHeroBanner({
 
                             <div className="text-xs text-muted-foreground truncate mt-0.5">
                               <>
-                                {highlightText(
-                                    result.projectName,
-                                    getHighlightQuery(
-                                      debouncedSearchTerm,
-                                      item.fuzzyHighlightValue
-                                    )
-                                  )}
+                                {highlightText(result.projectName, debouncedSearchTerm)}
                                 <span> (</span>
-                                {highlightText(
-                                    result.projectKey,
-                                    getHighlightQuery(
-                                      debouncedSearchTerm,
-                                      item.fuzzyHighlightValue
-                                    )
-                                  )}
+                                {highlightText(result.projectKey, debouncedSearchTerm)}
                                 <span>)</span>
                               </>
                             </div>
