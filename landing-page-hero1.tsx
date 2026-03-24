@@ -1,35 +1,4 @@
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
-
-{shouldShowTabs && (
-  <div className="sticky top-0 z-10 bg-background pb-2">
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) => setActiveTab(value as SearchTab)}
-    >
-      <TabsList>
-        <TabsTrigger
-          value="portal"
-          disabled={!hasPortalResults}
-          className="cursor-pointer disabled:cursor-not-allowed"
-        >
-          Portals
-          <span className="ml-1.5 text-xs">({portalResults.length})</span>
-        </TabsTrigger>
-
-        <TabsTrigger
-          value="requestType"
-          disabled={!hasRequestTypeResults}
-          className="cursor-pointer disabled:cursor-not-allowed"
-        >
-          Request Types
-          <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
-  </div>
-)}
-
-// /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
@@ -37,6 +6,7 @@ import { useQueries } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Loader2, FileText, ArrowRight, FolderTree } from "lucide-react";
 import { Index } from "flexsearch";
 import { distance as levenshteinDistance } from "fastest-levenshtein";
@@ -92,22 +62,22 @@ type RequestTypeSearchDoc = {
 
 type SearchResultItem =
   | {
-      id: string;
-      type: "portal";
-      score: number;
-      matchedOn: "projectName" | "projectKey" | "description";
-      portal: PortalInfo;
-      projectName: string;
-      projectKey: string;
-      description: string;
-    }
+    id: string;
+    type: "portal";
+    score: number;
+    matchedOn: "projectName" | "projectKey" | "description";
+    portal: PortalInfo;
+    projectName: string;
+    projectKey: string;
+    description: string;
+  }
   | {
-      id: string;
-      type: "requestType";
-      score: number;
-      matchedOn: "requestTypeName" | "projectName" | "projectKey";
-      result: GlobalRequestTypeSearchResult;
-    };
+    id: string;
+    type: "requestType";
+    score: number;
+    matchedOn: "requestTypeName" | "projectName" | "projectKey";
+    result: GlobalRequestTypeSearchResult;
+  };
 
 function normalizeSearchText(value?: string): string {
   if (!value) return "";
@@ -335,10 +305,10 @@ function getBestHighlightRangeForToken(text: string, queryToken: string): Highli
 
   let best:
     | {
-        start: number;
-        end: number;
-        score: number;
-      }
+      start: number;
+      end: number;
+      score: number;
+    }
     | null = null;
 
   for (const range of tokenRanges) {
@@ -456,6 +426,7 @@ function getTextPartsWithFuzzyHighlights(
 
   return parts;
 }
+
 
 function getTextPartsWithHighlights(
   text: string,
@@ -1255,56 +1226,43 @@ export function LandingHeroBanner({
                 <div className="space-y-4 pb-2">
                   {shouldShowTabs && (
                     <div className="sticky top-0 z-10 bg-background pb-2">
-                      <div className="inline-flex rounded-lg border bg-muted/40 p-1">
-                        <button
-                          type="button"
-                          disabled={!hasPortalResults}
-                          onClick={() => hasPortalResults && setActiveTab("portal")}
-                          className={[
-                            "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                            activeTab === "portal" && hasPortalResults
-                              ? "bg-background text-foreground shadow-sm"
-                              : "text-muted-foreground",
-                            !hasPortalResults
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:bg-background/70",
-                          ].join(" ")}
-                        >
-                          Portals
-                          <span className="ml-1.5 text-xs">({portalResults.length})</span>
-                        </button>
+                      <Tabs
+                        value={activeTab}
+                        onValueChange={(value) => setActiveTab(value as SearchTab)}
+                      >
+                        <TabsList>
+                          <TabsTrigger
+                            value="portal"
+                            disabled={!hasPortalResults}
+                            className="cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            Portals
+                            <span className="ml-1.5 text-xs">({portalResults.length})</span>
+                          </TabsTrigger>
 
-                        <button
-                          type="button"
-                          disabled={!hasRequestTypeResults}
-                          onClick={() => hasRequestTypeResults && setActiveTab("requestType")}
-                          className={[
-                            "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                            activeTab === "requestType" && hasRequestTypeResults
-                              ? "bg-background text-foreground shadow-sm"
-                              : "text-muted-foreground",
-                            !hasRequestTypeResults
-                              ? "cursor-not-allowed opacity-50"
-                              : "hover:bg-background/70",
-                          ].join(" ")}
-                        >
-                          Request Types
-                          <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
-                        </button>
-                      </div>
+                          <TabsTrigger
+                            value="requestType"
+                            disabled={!hasRequestTypeResults}
+                            className="cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            Request Types
+                            <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     </div>
                   )}
 
                   <div className="space-y-1">
                     {activeTab === "portal"
                       ? portalResults.map((item) =>
-                          renderPortalResult(item as Extract<SearchResultItem, { type: "portal" }>)
-                        )
+                        renderPortalResult(item as Extract<SearchResultItem, { type: "portal" }>)
+                      )
                       : requestTypeResults.map((item) =>
-                          renderRequestTypeResult(
-                            item as Extract<SearchResultItem, { type: "requestType" }>
-                          )
-                        )}
+                        renderRequestTypeResult(
+                          item as Extract<SearchResultItem, { type: "requestType" }>
+                        )
+                      )}
                   </div>
                 </div>
               ) : (
