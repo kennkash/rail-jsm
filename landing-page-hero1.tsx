@@ -1,4 +1,5 @@
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
+// /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
@@ -35,6 +36,8 @@ type LandingHeroBannerProps = {
   visiblePortals: PortalInfo[];
   onPortalSelect: (portal: PortalInfo) => void;
 };
+
+type SearchTab = "portal" | "requestType";
 
 type PortalSearchDoc = {
   id: string;
@@ -424,7 +427,6 @@ function getTextPartsWithFuzzyHighlights(
   return parts;
 }
 
-
 function getTextPartsWithHighlights(
   text: string,
   query: string
@@ -519,6 +521,7 @@ export function LandingHeroBanner({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SearchTab>("portal");
 
   const [portalProjects, setPortalProjects] = useState<Project[]>([]);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
@@ -997,8 +1000,31 @@ export function LandingHeroBanner({
     [combinedResults]
   );
 
+  const hasPortalResults = portalResults.length > 0;
+  const hasRequestTypeResults = requestTypeResults.length > 0;
+  const hasSearchResults = hasPortalResults || hasRequestTypeResults;
+
   const isSearching =
     searchTokens.length > 0 && (isProjectsLoading || isSearchingRequestTypes);
+
+  const shouldShowTabs =
+    debouncedSearchTerm.length >= 2 && !isSearching && hasSearchResults;
+
+  useEffect(() => {
+    if (isSearching) return;
+
+    if (hasPortalResults) {
+      setActiveTab("portal");
+      return;
+    }
+
+    if (hasRequestTypeResults) {
+      setActiveTab("requestType");
+      return;
+    }
+
+    setActiveTab("portal");
+  }, [hasPortalResults, hasRequestTypeResults, isSearching, debouncedSearchTerm]);
 
   const handleRequestTypeClick = (result: GlobalRequestTypeSearchResult) => {
     const url = buildRequestTypeUrl(
@@ -1008,6 +1034,111 @@ export function LandingHeroBanner({
       result.portalId
     );
     window.location.href = url;
+  };
+
+  const renderPortalResult = (item: Extract<SearchResultItem, { type: "portal" }>) => (
+    <button
+      key={item.id}
+      type="button"
+      className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-muted rounded-lg transition-colors cursor-pointer"
+      onClick={() => onPortalSelect(item.portal)}
+    >
+      <div className="flex-shrink-0 mt-0.5">
+        <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+          <FolderTree className="h-3.5 w-3.5 text-primary" />
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="font-medium text-sm text-foreground truncate">
+            {item.matchedOn === "projectName"
+              ? highlightText(item.projectName, debouncedSearchTerm)
+              : item.projectName}
+          </div>
+
+          <Badge variant="secondary" className="text-[10px]">
+            Portal
+          </Badge>
+
+          <Badge variant="outline" className="text-[10px]">
+            {item.matchedOn === "projectName"
+              ? "Matched on project name"
+              : item.matchedOn === "projectKey"
+                ? "Matched on project key"
+                : "Matched on keyword"}
+          </Badge>
+        </div>
+
+        <div className="text-xs text-muted-foreground truncate mt-0.5">
+          {item.matchedOn === "projectKey"
+            ? highlightText(item.projectKey, debouncedSearchTerm)
+            : item.projectKey}
+        </div>
+
+        {item.description && (
+          <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+            {item.matchedOn === "description"
+              ? getHighlightedSnippet(item.description, debouncedSearchTerm)
+              : item.description}
+          </div>
+        )}
+      </div>
+
+      <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+    </button>
+  );
+
+  const renderRequestTypeResult = (
+    item: Extract<SearchResultItem, { type: "requestType" }>
+  ) => {
+    const result = item.result;
+
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-muted rounded-lg transition-colors cursor-pointer"
+        onClick={() => handleRequestTypeClick(result)}
+      >
+        <div className="flex-shrink-0 mt-0.5">
+          {result.requestType.iconUrl ? (
+            <img
+              src={result.requestType.iconUrl}
+              alt=""
+              className="h-6 w-6 rounded"
+            />
+          ) : (
+            <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+              <FileText className="h-3.5 w-3.5 text-primary" />
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="font-medium text-sm text-foreground truncate">
+              {highlightText(result.requestType.name, debouncedSearchTerm)}
+            </div>
+
+            <Badge variant="secondary" className="text-[10px]">
+              Request Type
+            </Badge>
+          </div>
+
+          <div className="text-xs text-muted-foreground truncate mt-0.5">
+            <>
+              {highlightText(result.projectName, debouncedSearchTerm)}
+              <span> (</span>
+              {highlightText(result.projectKey, debouncedSearchTerm)}
+              <span>)</span>
+            </>
+          </div>
+        </div>
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+      </button>
+    );
   };
 
   return (
@@ -1089,135 +1220,68 @@ export function LandingHeroBanner({
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
               </div>
-            ) : combinedResults.length > 0 ? (
-              <div className="space-y-6 pb-2">
-                {portalResults.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="px-1 pb-1">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Portals
-                      </div>
-                    </div>
-
-                    {portalResults.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-muted rounded-lg transition-colors cursor-pointer"
-                        onClick={() => onPortalSelect(item.portal)}
-                      >
-                        <div className="flex-shrink-0 mt-0.5">
-                          <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
-                            <FolderTree className="h-3.5 w-3.5 text-primary" />
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="font-medium text-sm text-foreground truncate">
-                              {item.matchedOn === "projectName"
-                                ? highlightText(item.projectName, debouncedSearchTerm)
-                                : item.projectName}
-                            </div>
-
-                            <Badge variant="secondary" className="text-[10px]">
-                              Portal
-                            </Badge>
-
-                            <Badge variant="outline" className="text-[10px]">
-                              {item.matchedOn === "projectName"
-                                ? "Matched on project name"
-                                : item.matchedOn === "projectKey"
-                                  ? "Matched on project key"
-                                  : "Matched on keyword"}
-                            </Badge>
-                          </div>
-
-                          <div className="text-xs text-muted-foreground truncate mt-0.5">
-                            {item.matchedOn === "projectKey"
-                              ? highlightText(item.projectKey, debouncedSearchTerm)
-                              : item.projectKey}
-                          </div>
-
-                          {item.description && (
-                            <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                              {item.matchedOn === "description"
-                                ? getHighlightedSnippet(item.description, debouncedSearchTerm)
-                                : item.description}
-                            </div>
-                          )}
-                        </div>
-
-                        <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {requestTypeResults.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="px-1 pb-1">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Request Types
-                      </div>
-                    </div>
-
-                    {requestTypeResults.map((item) => {
-                      const result = item.result;
-
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-muted rounded-lg transition-colors cursor-pointer"
-                          onClick={() => handleRequestTypeClick(result)}
-                        >
-                          <div className="flex-shrink-0 mt-0.5">
-                            {result.requestType.iconUrl ? (
-                              <img
-                                src={result.requestType.iconUrl}
-                                alt=""
-                                className="h-6 w-6 rounded"
-                              />
-                            ) : (
-                              <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
-                                <FileText className="h-3.5 w-3.5 text-primary" />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="font-medium text-sm text-foreground truncate">
-                                {highlightText(result.requestType.name, debouncedSearchTerm)}
-                              </div>
-
-                              <Badge variant="secondary" className="text-[10px]">
-                                Request Type
-                              </Badge>
-                            </div>
-
-                            <div className="text-xs text-muted-foreground truncate mt-0.5">
-                              <>
-                                {highlightText(result.projectName, debouncedSearchTerm)}
-                                <span> (</span>
-                                {highlightText(result.projectKey, debouncedSearchTerm)}
-                                <span>)</span>
-                              </>
-                            </div>
-                          </div>
-
-                          <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             ) : debouncedSearchTerm.length >= 2 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                No portals or request types found for &quot;{debouncedSearchTerm}&quot;
-              </div>
+              hasSearchResults ? (
+                <div className="space-y-4 pb-2">
+                  {shouldShowTabs && (
+                    <div className="sticky top-0 z-10 bg-background pb-2">
+                      <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+                        <button
+                          type="button"
+                          disabled={!hasPortalResults}
+                          onClick={() => hasPortalResults && setActiveTab("portal")}
+                          className={[
+                            "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                            activeTab === "portal" && hasPortalResults
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground",
+                            !hasPortalResults
+                              ? "cursor-not-allowed opacity-50"
+                              : "hover:bg-background/70",
+                          ].join(" ")}
+                        >
+                          Portals
+                          <span className="ml-1.5 text-xs">({portalResults.length})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!hasRequestTypeResults}
+                          onClick={() => hasRequestTypeResults && setActiveTab("requestType")}
+                          className={[
+                            "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                            activeTab === "requestType" && hasRequestTypeResults
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground",
+                            !hasRequestTypeResults
+                              ? "cursor-not-allowed opacity-50"
+                              : "hover:bg-background/70",
+                          ].join(" ")}
+                        >
+                          Request Types
+                          <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    {activeTab === "portal"
+                      ? portalResults.map((item) =>
+                          renderPortalResult(item as Extract<SearchResultItem, { type: "portal" }>)
+                        )
+                      : requestTypeResults.map((item) =>
+                          renderRequestTypeResult(
+                            item as Extract<SearchResultItem, { type: "requestType" }>
+                          )
+                        )}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No portals or request types found for &quot;{debouncedSearchTerm}&quot;
+                </div>
+              )
             ) : (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 Type at least 2 characters to search
