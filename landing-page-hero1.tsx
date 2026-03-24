@@ -1,4 +1,34 @@
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
+
+{shouldShowTabs && (
+  <div className="sticky top-0 z-10 bg-background pb-2">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(value as SearchTab)}
+    >
+      <TabsList>
+        <TabsTrigger
+          value="portal"
+          disabled={!hasPortalResults}
+          className="cursor-pointer disabled:cursor-not-allowed"
+        >
+          Portals
+          <span className="ml-1.5 text-xs">({portalResults.length})</span>
+        </TabsTrigger>
+
+        <TabsTrigger
+          value="requestType"
+          disabled={!hasRequestTypeResults}
+          className="cursor-pointer disabled:cursor-not-allowed"
+        >
+          Request Types
+          <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+)}
+
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 "use client";
 
