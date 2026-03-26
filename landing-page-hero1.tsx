@@ -1,3 +1,41 @@
+const SEARCHABLE_DESCRIPTION_MAX_LENGTH = 1000;
+
+function truncateDescriptionForSearch(value?: string, maxLength = SEARCHABLE_DESCRIPTION_MAX_LENGTH): string {
+  if (!value) return "";
+
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+
+  return `${trimmed.slice(0, maxLength).trimEnd()}…`;
+}
+
+
+
+const portalDocs = useMemo<PortalSearchDoc[]>(() => {
+  return visiblePortals
+    .filter((portal) => !!portal.projectKey && !!portal.projectName)
+    .map((portal) => {
+      const project = projectsByKey.get(portal.projectKey.toUpperCase());
+      const description = truncateDescriptionForSearch(project?.description);
+
+      return {
+        id: `portal:${portal.projectKey}`,
+        type: "portal",
+        portal,
+        projectName: portal.projectName ?? "",
+        projectKey: portal.projectKey ?? "",
+        description,
+        normalizedProjectName: normalizeSearchText(portal.projectName),
+        normalizedProjectKey: normalizeSearchText(portal.projectKey),
+        normalizedDescription: normalizeSearchText(description),
+      };
+    });
+}, [visiblePortals, projectsByKey]);
+
+
+
+
+
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 "use client";
 
