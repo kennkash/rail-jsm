@@ -1,3 +1,38 @@
+
+
+1:Executing: /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/apache-maven-3.9.8/bin/mvn  -gs /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/apache-maven-3.9.8/conf/settings.xml help:effective-settings
+3:Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-deploy-plugin/maven-metadata.xml
+4:[WARNING] Could not transfer metadata org.apache.maven.plugins:maven-deploy-plugin/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org: Temporary failure in name resolution
+10:Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/maven-metadata.xml
+11:[WARNING] Could not transfer metadata org.apache.maven.plugins:maven-resources-plugin/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+16:Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-install-plugin/maven-metadata.xml
+17:[WARNING] Could not transfer metadata org.apache.maven.plugins:maven-install-plugin/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+27:[INFO] --------------------------[ atlassian-plugin ]--------------------------
+66:          <id>atlassian-public</id>
+67:          <url>http://192.30.106.99/repository/maven-group/</url>
+74:          <id>atlassian-plugin-sdk</id>
+75:          <url>file:///mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/repository</url>
+87:          <id>atlassian-public</id>
+88:          <url>http://192.30.106.99/repository/maven-group/</url>
+95:          <id>atlassian-plugin-sdk</id>
+96:          <url>file:///mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/repository</url>
+103:    <pluginGroup>com.atlassian.maven.plugins</pluginGroup>
+
+
+
+195:  <repositories>
+207:      <url>http://192.30.106.99/repository/maven-group/</url>
+225:      <url>https://repo1.maven.apache.org/maven2</url>
+228:  <pluginRepositories>
+240:      <url>http://192.30.106.99/repository/maven-group/</url>
+
+
+
+grep -n "mirrorOf\|192.30.106.99\|central\|atlassian" effective-settings.xml
+
+
+
+
 atlas-mvn help:effective-settings > effective-settings.xml
 atlas-mvn help:effective-pom > effective-pom.xml
 
