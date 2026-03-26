@@ -1,3 +1,33 @@
+atlas-mvn is /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/bin/atlas-mvn
+     1  /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/bin
+     2  /config/.local/bin
+     3  /mnt/kubeadm_ds/admin/bin
+     4  /mnt/saskube/dotnet
+     5  /mnt/saskube/jetbrains/rider/2024.3.3/bin
+     6  /mnt/saskube/bin
+     7  /mnt/saskube/python/pyenv/plugins/pyenv-virtualenv-1.2.4/shims
+     8  /mnt/k.kashmiry/.pyenv/shims
+     9  /mnt/k.kashmiry/.pyenv/bin
+    10  /mnt/k.kashmiry/atlassian-plugin-sdk-8.2.10/bin
+    11  /config/.local/bin
+    12  /mnt/k.kashmiry/.local/bin
+    13  /mnt/k.kashmiry/.nvm/versions/node/v22.14.0/bin
+    14  /mnt/kubeadm_ds/admin/bin
+    15  /mnt/saskube/dotnet
+    16  /mnt/saskube/jetbrains/rider/2024.3.3/bin
+    17  /mnt/saskube/bin
+    18  /mnt/saskube/python/pyenv/plugins/pyenv-virtualenv-1.2.4/shims
+    19  /mnt/k.kashmiry/.pyenv/bin
+    20  /command
+    21  /lsiopy/bin
+    22  /usr/local/sbin
+    23  /usr/local/bin
+    24  /usr/sbin
+    25  /usr/bin
+    26  /sbin
+    27  /bin
+
+
 type -a atlas-mvn
 echo "$PATH" | tr ':' '\n' | nl
 
