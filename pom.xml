@@ -1,3 +1,7 @@
+type -a atlas-mvn
+echo "$PATH" | tr ':' '\n' | nl
+
+
 echo $SHELL
 which atlas-mvn
 type -a atlas-mvn
