@@ -1,3 +1,5 @@
+curl -I "http://192.30.106.99/repository/maven-group/com/atlassian/platform/dependencies/platform-bundled-plugins/7.1.6/platform-bundled-plugins-7.1.6.pom"
+
 grep -R "atlassian-plugin-sdk-8.2.10\|atlassian-plugin-sdk-9.11.2\|ATLASSIAN_PLUGIN_SDK_HOME\|ATLAS_HOME" \
   ~/.bashrc ~/.bash_profile ~/.profile ~/.bash_login /etc/profile /etc/bash.bashrc 2>/dev/null
 
