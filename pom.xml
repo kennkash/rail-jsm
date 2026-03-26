@@ -1,3 +1,14 @@
+atlas-mvn help:effective-settings > effective-settings.xml
+atlas-mvn help:effective-pom > effective-pom.xml
+
+
+grep -n "mirrorOf\|192.30.106.99\|central\|atlassian" effective-settings.xml
+
+
+grep -n "<repositories>\|<pluginRepositories>\|repo1.maven.apache.org\|packages.atlassian.com\|192.30.106.99" effective-pom.xml
+
+
+
 rm -rf ~/.m2/repository/com/atlassian/platform/dependencies/platform-bundled-plugins/7.1.6
 rm -rf ~/.m2/repository/com/atlassian/webhooks/atlassian-webhooks-api
 rm -rf ~/.m2/repository/com/atlassian/webhooks/atlassian-webhooks-spi
