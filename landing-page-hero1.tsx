@@ -1,3 +1,47 @@
+const requestTypeResults = useMemo(() => {
+  const requestTypes = combinedResults.filter(
+    (item): item is Extract<SearchResultItem, { type: "requestType" }> =>
+      item.type === "requestType"
+  );
+
+  const rankedPortals = combinedResults.filter(
+    (item): item is Extract<SearchResultItem, { type: "portal" }> =>
+      item.type === "portal"
+  );
+
+  const portalRankByProjectKey = new Map<string, number>();
+
+  rankedPortals.forEach((portal, index) => {
+    portalRankByProjectKey.set(portal.projectKey.toUpperCase(), index);
+  });
+
+  return [...requestTypes].sort((a, b) => {
+    const aPortalRank = portalRankByProjectKey.get(a.result.projectKey.toUpperCase());
+    const bPortalRank = portalRankByProjectKey.get(b.result.projectKey.toUpperCase());
+
+    const aHasMatchingPortal = aPortalRank !== undefined;
+    const bHasMatchingPortal = bPortalRank !== undefined;
+
+    // Request types tied to matched portals come first
+    if (aHasMatchingPortal && !bHasMatchingPortal) return -1;
+    if (!aHasMatchingPortal && bHasMatchingPortal) return 1;
+
+    // If both belong to matched portals, follow the portal ranking
+    if (aHasMatchingPortal && bHasMatchingPortal && aPortalRank !== bPortalRank) {
+      return aPortalRank! - bPortalRank!;
+    }
+
+    // Within the same portal bucket, preserve normal request type score ordering
+    if (b.score !== a.score) return b.score - a.score;
+
+    return a.result.requestType.name.localeCompare(b.result.requestType.name);
+  });
+}, [combinedResults]);
+
+
+
+
+
 const SEARCHABLE_DESCRIPTION_MAX_LENGTH = 1000;
 
 function truncateDescriptionForSearch(value?: string, maxLength = SEARCHABLE_DESCRIPTION_MAX_LENGTH): string {
