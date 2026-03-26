@@ -1,3 +1,12 @@
+echo $SHELL
+which atlas-mvn
+type -a atlas-mvn
+echo "$PATH" | tr ':' '\n' | nl
+grep -R "atlassian-plugin-sdk\|ATLASSIAN_PLUGIN_SDK_HOME\|ATLAS_HOME" \
+  ~/.zshrc ~/.zprofile ~/.zlogin ~/.bashrc ~/.bash_profile ~/.profile \
+  /etc/profile /etc/zshrc /etc/zprofile /etc/paths.d/* 2>/dev/null
+
+
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
