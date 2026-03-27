@@ -1,4 +1,52 @@
+"use client";
 
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Loader2, FileText, ArrowRight, FolderTree } from "lucide-react";
+import { Index } from "flexsearch";
+import { distance as levenshteinDistance } from "fastest-levenshtein";
+import { fetchJsmRequestTypeIcons } from "@/lib/api/jira-search-client";
+import { fetchProjects, type Project } from "@/lib/api/projects-client";
+import { buildRequestTypeUrl } from "@/types/router";
+import {
+  searchAllRequestTypes,
+  type GlobalRequestTypeSearchResult,
+} from "@/lib/api/request-types-client";
+import type { PortalInfo } from "@/lib/api/portals-client";
+
+// Static configuration - hard-coded values
+const HERO_TITLE = "Samsung Customer Request Portal";
+const HERO_SUBTITLE = "Search for the right portal, then submit your request";
+const FIXED_MIN_HEIGHT = "min-h-[18rem]";
+const SEARCH_LIMIT = 20;
+
+type BootstrapWindow = typeof window & {
+  RAIL_PORTAL_BOOTSTRAP?: {
+    resourceBase?: string;
+  };
+};
+
+function getHeroBannerPath(): string {
+  if (typeof window === "undefined") {
+    return "/download/resources/com.samsungbuilder.jsm.rail-portal:rail-portal-resources/SAS_Hero_Banner.png";
+  }
+
+  const bootstrap = (window as BootstrapWindow).RAIL_PORTAL_BOOTSTRAP;
+  const resourceBase = bootstrap?.resourceBase || "";
+  const normalizedBase = resourceBase.endsWith("/") ? resourceBase.slice(0, -1) : resourceBase;
+
+  if (normalizedBase) {
+    return `${normalizedBase}/SAS_Hero_Banner.png`;
+  }
+
+  return "/download/resources/com.samsungbuilder.jsm.rail-portal:rail-portal-resources/SAS_Hero_Banner.png";
+}
+
+const HERO_BACKGROUND_IMAGE = getHeroBannerPath();
 
 1:Executing: /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/apache-maven-3.9.8/bin/mvn  -gs /mnt/k.kashmiry/atlassian-plugin-sdk-9.11.2/apache-maven-3.9.8/conf/settings.xml help:effective-settings
 3:Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-deploy-plugin/maven-metadata.xml
