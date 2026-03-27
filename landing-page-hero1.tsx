@@ -23,9 +23,31 @@ import type { PortalInfo } from "@/lib/api/portals-client";
 const HERO_TITLE = "Samsung Customer Request Portal";
 const HERO_SUBTITLE = "Search for the right portal, then submit your request";
 const FIXED_MIN_HEIGHT = "min-h-[18rem]";
-const HERO_BACKGROUND_IMAGE =
-  "https://jira.samsungaustin.com/secure/attachment/503395/503395_sas_building2-resized.jpg";
 const SEARCH_LIMIT = 20;
+
+type BootstrapWindow = typeof window & {
+  RAIL_PORTAL_BOOTSTRAP?: {
+    resourceBase?: string;
+  };
+};
+
+function getHeroBannerPath(): string {
+  if (typeof window === "undefined") {
+    return "/download/resources/com.samsungbuilder.jsm.rail-portal:rail-portal-resources/SAS_Hero_Banner.jpg";
+  }
+
+  const bootstrap = (window as BootstrapWindow).RAIL_PORTAL_BOOTSTRAP;
+  const resourceBase = bootstrap?.resourceBase || "";
+  const normalizedBase = resourceBase.endsWith("/") ? resourceBase.slice(0, -1) : resourceBase;
+
+  if (normalizedBase) {
+    return `${normalizedBase}/SAS_Hero_Banner.jpg`;
+  }
+
+  return "/download/resources/com.samsungbuilder.jsm.rail-portal:rail-portal-resources/SAS_Hero_Banner.jpg";
+}
+
+const HERO_BACKGROUND_IMAGE = getHeroBannerPath();
 
 const FUZZY_MIN_TOKEN_LENGTH = 3;
 const FUZZY_MAX_EDIT_DISTANCE_SHORT = 1;
@@ -1233,7 +1255,17 @@ export function LandingHeroBanner({
         </div>
       </div>
 
-      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+      <Dialog 
+      open={isSearchOpen} 
+      onOpenChange={(open) => { 
+        setIsSearchOpen(open);
+        
+        if (!open) {
+          setSearchTerm("");
+          setDebouncedSearchTerm('');
+        }
+      }}
+      >
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Search Portals and Request Types</DialogTitle>
