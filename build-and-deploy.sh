@@ -1,3 +1,11 @@
+Why am I getting the git_cliff error for this commit message and this build script?: 
+
+'''fix(ui): update request icon urls
+
+-Updated the request icon URLs to the "public" customer facing URLs
+-The icon URLs currently used do not render for users without a license
+'''
+
 #!/bin/bash
 # RAIL Portal Plugin Build and Deploy Script
 # This script automates the complete build and deployment workflow:
@@ -183,3 +191,39 @@ echo -e "${YELLOW}Artifact URL:${NC} ${GITLAB_URL}/digitalsolutions/knowledge/ra
 echo -e "${YELLOW}Release Page:${NC} ${GITLAB_URL}/digitalsolutions/knowledge/rail-at-sas/-/releases"
 echo -e "${YELLOW}Tag:${NC} v${VERSION}"
 echo -e "${GREEN}─────────────────────────────────────────────────────────────────${NC}\n"
+
+
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  18.481 s
+[INFO] Finished at: 2026-03-27T14:38:51-05:00
+[INFO] ------------------------------------------------------------------------
+==> Step 5/9: Uploading to GitLab Registry...
+{"message":"201 Created"}
+==> Step 6/9: Committing Release Metadata & Generating Changelog...
+ WARN  git_cliff_core::changelog > 35 commit(s) were skipped due to parse error(s) (run with `-vv` for details)
+[main 9bf4aad] chore(release): prepare for v2.0.19
+ 3 files changed, 236 insertions(+), 234 deletions(-)
+==> Step 7/9: Finalizing Git Tag...
+==> Step 8/9: Pushing code and tags...
+Enumerating objects: 30, done.
+Counting objects: 100% (30/30), done.
+Delta compression using up to 96 threads
+Compressing objects: 100% (16/16), done.
+Writing objects: 100% (17/17), 68.88 KiB | 230.00 KiB/s, done.
+Total 17 (delta 11), reused 0 (delta 0), pack-reused 0
+To gitlab.smartcloud.samsungds.net:digitalsolutions/knowledge/rail-at-sas.git
+   5513bbe..9bf4aad  main -> main
+ * [new tag]         v2.0.19 -> v2.0.19
+==> Step 9/9: Creating Official GitLab Release...
+ WARN  git_cliff_core::changelog > 1 commit(s) were skipped due to parse error(s) (run with `-vv` for details)
+
+─────────────────────────────────────────────────────────────────
+✓ Release 2.0.19 is complete!
+Artifact URL: https://gitlab.smartcloud.samsungds.net/digitalsolutions/knowledge/rail-at-sas/-/packages
+Release Page: https://gitlab.smartcloud.samsungds.net/digitalsolutions/knowledge/rail-at-sas/-/releases
+Tag: v2.0.19
+─────────────────────────────────────────────────────────────────
+
+
