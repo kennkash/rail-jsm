@@ -1,3 +1,10 @@
+fix(ui): update banner on home page to use resource
+- Update the home page hero banner to use a file within the plugin instead of using a hardcoded link
+
+- The link was pointing to an image in Jira and wasn't rendering for users without permission or a license
+
+- Updating build script and the atlassian-plugin.xml to include the image as a resource
+
 TRACE git_cliff_core::changelog > 11ef47d - Commit did not match conventional format: `Incorrect body syntax` (fix(ui): update banner on home page to use resource)
 
 body = """
