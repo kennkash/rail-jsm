@@ -1,3 +1,5 @@
+TRACE git_cliff_core::changelog > 11ef47d - Commit did not match conventional format: `Incorrect body syntax` (fix(ui): update banner on home page to use resource)
+
 body = """
 {% if version %}\
     ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
