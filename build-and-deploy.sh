@@ -1,3 +1,32 @@
+# Step 6: Validate unreleased commits before changelog/tagging
+print_step "Step 6/10: Validating unreleased commits with git-cliff..."
+
+CLIFF_LOG=$(mktemp)
+
+npx git-cliff -vv --unreleased > /dev/null 2>"${CLIFF_LOG}"
+CLIFF_STATUS=$?
+
+if [ "${CLIFF_STATUS}" -ne 0 ] || grep -Eqi "skipped due to parse error|did not match conventional format|incorrect body syntax" "${CLIFF_LOG}"; then
+    echo ""
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    print_error "Release blocked: invalid conventional commit message detected."
+    echo -e "${YELLOW}What to do:${NC}"
+    echo "  1. Look at the commit shown below"
+    echo "  2. Reword it so the subject/body follow conventional commit format"
+    echo "  3. Ensure there is a blank line between subject and body"
+    echo "  4. Rerun this release script"
+    echo ""
+    echo -e "${RED}git-cliff details:${NC}"
+    cat "${CLIFF_LOG}"
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    rm -f "${CLIFF_LOG}"
+    exit 1
+fi
+
+rm -f "${CLIFF_LOG}"
+
+
+
 Why am I getting the git_cliff error for this commit message and this build script?: 
 
 '''fix(ui): update request icon urls
