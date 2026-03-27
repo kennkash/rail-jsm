@@ -4,10 +4,12 @@ body = """
 {% endif %}{% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | upper_first }}
 {% for commit in commits %}- {% if commit.scope %}*({{commit.scope}})* {% endif %}{{ commit.message | upper_first }}{% if commit.body %}
-  > {{ commit.body | trim | replace(from="\n", to="\n  >\n  > ") }}{% endif %}
+{% for line in commit.body | trim | split(pat="\n") %}  - {{ line | trim }}
+{% endfor %}{% endif %}
 {% endfor %}
 {% endfor %}\n
 """
+
 
 
 
