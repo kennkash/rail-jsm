@@ -1,3 +1,54 @@
+/**
+ * Normalize user-entered Echo query text so it is safe and stable
+ * for the downstream Echo service.
+ *
+ * - Converts CR/LF/tab to spaces
+ * - Removes control characters
+ * - Collapses repeated whitespace
+ * - Trims leading/trailing whitespace
+ *
+ * Intentionally preserves normal punctuation and quotes unless
+ * you later confirm Echo also fails on those.
+ */
+export function normalizeEchoText(text: string): string {
+  return text
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Format a query with space key prefix
+ * This allows the Echo service to scope searches to specific Confluence spaces
+ */
+export function formatQueryWithSpace(
+  query: string,
+  spaceKey?: string | null,
+  prePrompt?: string
+): string {
+  const normalizedQuery = normalizeEchoText(query)
+  const normalizedPrePrompt = prePrompt ? normalizeEchoText(prePrompt) : ''
+
+  let formattedQuery = ''
+
+  if (spaceKey) {
+    formattedQuery = `#${spaceKey} `
+  }
+
+  if (normalizedPrePrompt) {
+    formattedQuery += `${normalizedPrePrompt} `
+  }
+
+  formattedQuery += normalizedQuery
+
+  return formattedQuery.trim()
+}
+
+
+
+
+
 // /rail-at-sas/frontend/lib/echo-llm-api.ts
 
 /**
