@@ -1,0 +1,31 @@
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:184 JQMIGRATE: Migrate is installed, version 1.4.1
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:888 Use of `window.Backbone` through AUI is deprecated and will be removed in AUI 10.0.0
+1297 @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:888
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:133 [Violation] Permissions policy violation: unload is not allowed in this document.
+add @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:133
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:1728 Use of `window._` through AUI is deprecated and will be removed in AUI 10.0.0
+6364 @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:1728
+batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:707 >>> RAIL Portal Interceptor: Initializing...
+batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:907 >>> RAIL Portal Interceptor: Handlers attached (currentlyOnPortalRoot=false)
+batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:10562 Multiple versions of FeatureGateClients found on the current page.
+      The currently bound version is 5.2.0 when module version 4.19.0 was loading.
+./node_modules/@atlaskit/feature-gate-js-client/dist/esm/client/index.js @ batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:10562
+/rest/helptips/1.0/tips?_=1774994038327:1  Failed to load resource: the server responded with a status of 403 ()
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:209 DEPRECATED JS - PopulateParameters has been deprecated since 9.0.0 and will be removed in 10.0.0.  
+     at HTMLDocument.<anonymous> (https://s2jiradev.samsungaustin.com/s/1482cbe08929bee866ae70246fa4efde-CDN/-ivqcx1/10030016/1bmwxe4/2a090dadb4ecfbae68425c3a2b96278c/_/download/contextbatch/js/_super,-jira.webresources:resource-phase-checkpoint-init/batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:314:993)
+i @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:209
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:209 DEPRECATED undefined - AJS.params has been deprecated since 9.0.0 and will be removed in 10.0.0.  
+     at https://s2jiradev.samsungaustin.com/s/1482cbe08929bee866ae70246fa4efde-CDN/-ivqcx1/10030016/1bmwxe4/2a090dadb4ecfbae68425c3a2b96278c/_/download/contextbatch/js/_super,-jira.webresources:resource-phase-checkpoint-init/batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:4777:6132
+i @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:209
+batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:677 Uncaught TypeError: Cannot read properties of undefined (reading 'indexOf')
+    at Object.isEnglishLocale (batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:677:648)
+    at HTMLDocument.<anonymous> (batch.js?_v=f008351&agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&locale=en-US&plugins.jquery.migrate.not.load=false:682:394)
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:54 [WRM] [handler] Downloading resources Array(1)
+batch.js?agile_global_admin_condition=true&analytics-enabled=true&assets-chaperone-condition-assets-imports-global-view-chaperone-sync-key=true&feature-flag-condition-assets.imports.global.view=true&feature-flag-condition-assets.imports.global.view.chaperone=true&jag=true&plugins.jquery.migrate.not.load=false:25 [BM] Collector installed
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:54 [WRM] [handler] Downloading resources Array(2)
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:54 [WRM] [handler] Downloading resources Array(2)
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:54 [WRM] [handler] Downloading resources Array(1)
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:54 [WRM] [handler] Downloading resources Array(1)
+batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:409 Theme switcher skeleton not found
+s @ batch.js?locale=en-US&plugins.jquery.migrate.not.load=false:409
+customer-rail:1  Failed to load resource: the server responded with a status of 403 ()
