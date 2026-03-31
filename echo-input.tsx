@@ -1,3 +1,61 @@
+const submitMessage = () => {
+  const trimmedInput = input.trim()
+  if (!trimmedInput || isProcessing) return
+
+  // Format query with hidden space key prefix and optional pre-prompt
+  // If no space is selected, don't add the #SPACE_KEY prefix (search all spaces)
+  let formattedQuery = trimmedInput
+  if (activeSpaceKey) {
+    formattedQuery = `#${activeSpaceKey} `
+    if (prePrompt && prePrompt.trim()) {
+      formattedQuery += `${prePrompt.trim()} `
+    }
+    formattedQuery += trimmedInput
+  } else {
+    // No space selected - search all spaces (just use the raw query)
+    if (prePrompt && prePrompt.trim()) {
+      formattedQuery = `${prePrompt.trim()} ${trimmedInput}`
+    }
+  }
+
+  addMessage({
+    role: 'user',
+    content: trimmedInput,
+  })
+
+  setInput('')
+
+  if (onSend) {
+    onSend(trimmedInput, formattedQuery)
+  } else {
+    setIsProcessing(true)
+    setTimeout(() => {
+      setIsProcessing(false)
+      addMessage({
+        role: 'assistant',
+        content: `I'm processing your question: "${trimmedInput}"\n\nThis is a demo response. The AI integration is being configured to provide intelligent answers from your Confluence knowledge base.`,
+      })
+    }, 1500)
+  }
+}
+
+const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault()
+  submitMessage()
+}
+
+const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  setInput(e.target.value)
+}
+
+const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    submitMessage()
+  }
+}
+
+
 // /rail-at-sas/frontend/components/echo-ai/echo-input.tsx
 
 "use client"
