@@ -1,11 +1,3 @@
-const sortedGroupNames =
-  apiGroups.length > 0
-    ? [...apiGroups]
-        .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999))
-        .map(g => g.name)
-    : Object.keys(sections).sort();
-
-
 // rail-at-sas/frontend/components/portal-builder/form-components/portal-request-types.tsx
 'use client'
 
@@ -495,9 +487,12 @@ export function PortalRequestTypes(
 
         // 3. Sort Group Tabs based on Backend Order
         // The backend returns groups sorted by their discovery/settings order
-        const sortedGroupNames = apiGroups.length > 0
-            ? apiGroups.map(g => g.name)
-            : Object.keys(sections).sort();
+        const sortedGroupNames =
+            apiGroups.length > 0
+                ? [...apiGroups]
+                    .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999))
+                    .map(g => g.name)
+                : Object.keys(sections).sort();
 
         // 4. Sort Items Within Each Group
         return sortedGroupNames
@@ -738,7 +733,7 @@ export function PortalRequestTypes(
                                 onValueChange={isCustomerPortal ? setActiveGroup : undefined}
                                 className="w-full"
                             >
-                                <TabsList className="flex w-fit flex-wrap justify-start gap-2">
+                                <TabsList className="flex w-fit flex-wrap justify-start gap-2 h-auto mb-4">
                                     {groupedSections.map(({ name, types }) => (
                                         <TabsTrigger key={name} value={name} className="px-3 py-1.5 text-sm cursor-pointer">
                                             <span className="truncate">{name}</span>
