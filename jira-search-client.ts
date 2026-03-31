@@ -1,3 +1,343 @@
+{
+    "size": 13,
+    "start": 0,
+    "limit": 100,
+    "isLastPage": true,
+    "_links": {
+        "base": "https://s2jiradev.samsungaustin.com",
+        "context": "",
+        "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype"
+    },
+    "values": [
+        {
+            "id": "1260",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1260"
+            },
+            "name": "Retire Windows Server",
+            "description": "Retire and dispose of a Windows server.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "168"
+            ],
+            "icon": {
+                "id": "11133",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11133",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11133",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11133",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11133"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1261",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1261"
+            },
+            "name": "Modify Virtual Server",
+            "description": "Modify the configuration of an existing virtual server.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "166"
+            ],
+            "icon": {
+                "id": "11126",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11126",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11126",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11126",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11126"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1262",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1262"
+            },
+            "name": "Troubleshooting Assistance",
+            "description": "Request assistance for a problem on your Windows server.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "168"
+            ],
+            "icon": {
+                "id": "11139",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11139",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11139",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11139",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11139"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1263",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1263"
+            },
+            "name": "Provision Virtual Server",
+            "description": "Create a new virtual server.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "166"
+            ],
+            "icon": {
+                "id": "11123",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11123",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11123",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11123",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11123"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1264",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1264"
+            },
+            "name": "Remove DNS Record(s)",
+            "description": "Remove existing DNS record(s).",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "167"
+            ],
+            "icon": {
+                "id": "11121",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11121",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11121",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11121",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11121"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1265",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1265"
+            },
+            "name": "Add DNS Record(s)",
+            "description": "Add new DNS record(s).",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "167"
+            ],
+            "icon": {
+                "id": "11101",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11101",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11101",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11101",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11101"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1266",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1266"
+            },
+            "name": "Modify DNS record(s).",
+            "description": "Modify existing DNS record(s).",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "167"
+            ],
+            "icon": {
+                "id": "11131",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11131",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11131",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11131",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11131"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1267",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1267"
+            },
+            "name": "Troubleshooting Assistance",
+            "description": "Request assistance for a problem on your virtual server - Windows or Linux. The Cloud team will investigate and may transfer the request to the Windows or Linux team if no Cloud issues are found.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "166"
+            ],
+            "icon": {
+                "id": "11139",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11139",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11139",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11139",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11139"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1269",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1269"
+            },
+            "name": "Create Service Account",
+            "description": "Request a service account to be used automated processes or an application.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "265"
+            ],
+            "icon": {
+                "id": "11111",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11111",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11111",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11111",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11111"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1270",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1270"
+            },
+            "name": "Troubleshooting Assistance",
+            "description": "Request troubleshooting assistance for Active Directory authentication issues such as disabled account, LDAP setup, other Active Directory issues.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "265"
+            ],
+            "icon": {
+                "id": "11139",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11139",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11139",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11139",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11139"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1286",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1286"
+            },
+            "name": "Group Policy Change",
+            "description": "Make changes to or create a new GPO for SAS PCs or servers.",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "265"
+            ],
+            "icon": {
+                "id": "11133",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11133",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11133",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11133",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11133"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1430",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1430"
+            },
+            "name": "File Share Assistance",
+            "description": "",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "168"
+            ],
+            "icon": {
+                "id": "11120",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11120",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11120",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11120",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11120"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        },
+        {
+            "id": "1725",
+            "_links": {
+                "self": "https://s2jiradev.samsungaustin.com/rest/servicedeskapi/servicedesk/59/requesttype/1725"
+            },
+            "name": "Deploy Bare Metal Server",
+            "description": "",
+            "helpText": "",
+            "serviceDeskId": "59",
+            "groupIds": [
+                "168"
+            ],
+            "icon": {
+                "id": "11133",
+                "_links": {
+                    "iconUrls": {
+                        "48x48": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=large&avatarId=11133",
+                        "24x24": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=small&avatarId=11133",
+                        "16x16": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=xsmall&avatarId=11133",
+                        "32x32": "https://s2jiradev.samsungaustin.com/secure/viewavatar?avatarType=SD_REQTYPE&size=medium&avatarId=11133"
+                    }
+                }
+            },
+            "restrictionStatus": "OPEN"
+        }
+    ]
+}
+
+
 // /rail-at-sas/frontend/lib/api/jira-search-client.ts
 
 /**
