@@ -10,9 +10,70 @@ const sanitizeForQuery = (text: string): string => normalizeEchoText(text)
 
 const sendToLLM = async (
   displayMessage: string,
-  _formattedQuery: string,
   includeContext: boolean = false
-) => { ... }
+) => {
+  let effectivePrePrompt = prePrompt || ''
+  if (includeContext) {
+    const conversationContext = buildConversationContext()
+    if (conversationContext) {
+      effectivePrePrompt = conversationContext + effectivePrePrompt
+    }
+  }
+
+  setIsProcessing(true)
+  upsertStreamingAssistantMessage('', { isFinal: false })
+
+  try {
+    await queryEchoAI(
+      displayMessage,
+      {
+        endpoint: 'confluence',
+        stream: true,
+        spaceKey: activeSpaceKey,
+        prePrompt: effectivePrePrompt || undefined,
+      },
+      (chunk, fullText) => {
+        const answerMarker = '**AI Generated Answer:**'
+        const hasAnswerMarker = fullText.includes(answerMarker)
+
+        if (hasAnswerMarker) {
+          const parsed = parseStreamingResponse(fullText)
+          const displayContent = parsed.answer || ''
+
+          if (displayContent && displayContent.trim().length > 0) {
+            upsertStreamingAssistantMessage(displayContent, {
+              isFinal: false,
+            })
+          }
+        }
+      },
+      (response: EchoLLMResponse) => {
+        setIsProcessing(false)
+        const finalContent =
+          response.answer?.trim() ||
+          'Echo AI could not generate a response. Please try again.'
+        upsertStreamingAssistantMessage(finalContent, {
+          isFinal: true,
+          sources: response.sources,
+        })
+      },
+      (error: Error) => {
+        setIsProcessing(false)
+        toast.error('Failed to get response', {
+          description: error.message,
+        })
+
+        upsertStreamingAssistantMessage(
+          `I encountered an error while processing your question: "${displayMessage}". Please try again or contact support if the issue persists.\n\nError: ${error.message}`,
+          { isFinal: true }
+        )
+      }
+    )
+  } catch (error) {
+    console.error('Echo Chat exception:', error)
+    setIsProcessing(false)
+  }
+}
 
 
 // /rail-at-sas/frontend/components/echo-ai/echo-chat-interface.tsx
