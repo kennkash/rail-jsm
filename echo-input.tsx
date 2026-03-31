@@ -1,3 +1,22 @@
+<PromptInput
+  className={cn(className)}
+  onSubmit={handleSubmit}
+  onKeyDownCapture={(e) => {
+    const isTextareaEvent =
+      e.target instanceof HTMLTextAreaElement ||
+      (e.target instanceof HTMLElement && e.target.getAttribute('role') === 'textbox')
+
+    if (!isTextareaEvent) return
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      e.stopPropagation()
+      submitMessage()
+    }
+  }}
+>
+
+
 "use client"
 
 /**
