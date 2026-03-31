@@ -1,5 +1,10 @@
 // /rail-at-sas/frontend/lib/api/jira-search-client.ts
 
+/**
+ * API Client for Jira Service Desk Native Search Endpoints
+ * Calls the out-of-the-box JSM endpoints for KB articles and request type search
+ */
+
 type BootstrapWindow = typeof window & {
   RAIL_PORTAL_BOOTSTRAP?: {
     baseUrl?: string;
@@ -13,6 +18,7 @@ function getBootstrapBaseUrl(): string {
   const bootstrap = (window as BootstrapWindow).RAIL_PORTAL_BOOTSTRAP;
   return (bootstrap?.baseUrl ?? window.location.origin).replace(/\/$/, "");
 }
+
 
 /**
  * Convert Jira secure avatar URLs to the customer-shim version
@@ -45,78 +51,6 @@ function toCustomerShimAvatarUrl(rawUrl: string, baseUrl: string): string {
   }
 }
 
-/**
- * Fetch request type icons from native JSM API
- * GET /rest/servicedeskapi/servicedesk/{serviceDeskId}/requesttype
- *
- * This returns a mapping of request type ID to icon URL
- * Used to enrich search results with icons since RAIL API doesn't return them
- */
-export async function fetchJsmRequestTypeIcons(
-  serviceDeskId: string
-): Promise<Record<string, string>> {
-  const baseUrl = getBootstrapBaseUrl() || "";
-
-  try {
-    const response = await fetch(
-      `${baseUrl}/rest/servicedeskapi/servicedesk/${serviceDeskId}/requesttype?limit=100`,
-      { credentials: "same-origin" }
-    );
-
-    if (!response.ok) {
-      return {};
-    }
-
-    const payload = await response.json();
-    const values = Array.isArray(payload?.values) ? payload.values : [];
-
-    const mapping: Record<string, string> = {};
-
-    for (const value of values) {
-      if (!value || !value.id) continue;
-
-      const iconUrls = value.icon?._links?.iconUrls as Record<string, string> | undefined;
-      if (!iconUrls) continue;
-
-      const rawUrl =
-        iconUrls["32x32"] ||
-        iconUrls["24x24"] ||
-        iconUrls["16x16"] ||
-        iconUrls["48x48"];
-
-      if (typeof rawUrl === "string" && rawUrl.length > 0) {
-        mapping[String(value.id)] = toCustomerShimAvatarUrl(rawUrl, baseUrl);
-      }
-    }
-
-    return mapping;
-  } catch (error) {
-    return {};
-  }
-}
-
-
-
-// /rail-at-sas/frontend/lib/api/jira-search-client.ts
-
-/**
- * API Client for Jira Service Desk Native Search Endpoints
- * Calls the out-of-the-box JSM endpoints for KB articles and request type search
- */
-
-type BootstrapWindow = typeof window & {
-  RAIL_PORTAL_BOOTSTRAP?: {
-    baseUrl?: string;
-  };
-};
-
-function getBootstrapBaseUrl(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  const bootstrap = (window as BootstrapWindow).RAIL_PORTAL_BOOTSTRAP;
-  return (bootstrap?.baseUrl ?? window.location.origin).replace(/\/$/, "");
-}
 
 /**
  * Knowledge Base Article from JSM search
@@ -342,7 +276,7 @@ export async function fetchJsmRequestTypeIcons(
         iconUrls["48x48"];
 
       if (typeof url === "string" && url.length > 0) {
-        mapping[String(value.id)] = url;
+        mapping[String(value.id)] = toCustomerShimAvatarUrl(url, baseUrl);
       }
     }
 
