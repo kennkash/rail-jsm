@@ -1,3 +1,17 @@
+<div className="space-y-2">
+  <Label>Preview</Label>
+  <div className="rounded-md border bg-muted/30 p-3">
+    {form.enabled ? (
+      <RailAnnouncementBanner config={form} compact />
+    ) : (
+      <p className="text-sm text-muted-foreground">
+        Preview will appear here when the banner is enabled.
+      </p>
+    )}
+  </div>
+</div>
+
+
 // /rail-at-sas/frontend/components/admin/announcement-banner-settings-tab.tsx
 
 "use client";
