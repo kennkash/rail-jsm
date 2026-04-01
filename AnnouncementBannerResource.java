@@ -1,3 +1,5 @@
+// /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/AnnouncementBannerResource.java
+
 package com.samsungbuilder.jsm.rest;
 
 import com.atlassian.jira.component.ComponentAccessor;
