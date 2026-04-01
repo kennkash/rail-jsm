@@ -1,4 +1,4 @@
-// /frontend/lib/api/announcement-banner-client.ts
+// /rail-at-sas/frontend/lib/api/announcement-banner-client.ts
 const API_BASE = "/rest/rail/1.0";
 
 export type AnnouncementBannerConfig = {
