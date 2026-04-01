@@ -7,8 +7,10 @@ import com.atlassian.jira.security.JiraAuthenticationContext;
 import com.atlassian.jira.security.groups.GroupManager;
 import com.atlassian.jira.user.ApplicationUser;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
+import com.samsungbuilder.jsm.dto.AnnouncementBannerConfigDTO;
 import com.samsungbuilder.jsm.dto.GlobalConfigDTO;
 import com.samsungbuilder.jsm.dto.ProjectDTO;
+import com.samsungbuilder.jsm.service.AnnouncementBannerService;
 import com.samsungbuilder.jsm.service.GlobalConfigService;
 import com.samsungbuilder.jsm.service.ProjectService;
 import org.slf4j.Logger;
@@ -39,15 +41,18 @@ public class GlobalConfigResource {
 
     private final GlobalConfigService globalConfigService;
     private final ProjectService projectService;
+    private final AnnouncementBannerService announcementBannerService;
     private final JiraAuthenticationContext authenticationContext;
 
     @Inject
     public GlobalConfigResource(
             GlobalConfigService globalConfigService,
             ProjectService projectService,
+            AnnouncementBannerService announcementBannerService,
             @ComponentImport JiraAuthenticationContext authenticationContext) {
         this.globalConfigService = globalConfigService;
         this.projectService = projectService;
+        this.announcementBannerService = announcementBannerService;
         this.authenticationContext = authenticationContext;
     }
 
@@ -71,6 +76,23 @@ public class GlobalConfigResource {
         error.put("error", message);
         error.put("timestamp", System.currentTimeMillis());
         return error;
+    }
+
+    /**
+     * Convert announcement banner config to Map to bypass Jackson serialization issues
+     */
+    private Map<String, Object> toAnnouncementBannerMap(AnnouncementBannerConfigDTO config) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("enabled", config.isEnabled());
+        map.put("title", config.getTitle());
+        map.put("message", config.getMessage());
+        map.put("icon", config.getIcon());
+        map.put("backgroundColor", config.getBackgroundColor());
+        map.put("borderColor", config.getBorderColor());
+        map.put("textColor", config.getTextColor());
+        map.put("updatedBy", config.getUpdatedBy());
+        map.put("updatedAtEpochMs", config.getUpdatedAtEpochMs());
+        return map;
     }
 
     /**
@@ -99,13 +121,13 @@ public class GlobalConfigResource {
 
             GlobalConfigDTO config = globalConfigService.getGlobalConfig();
 
-            // Convert to Map to bypass Jackson serialization issues
             Map<String, Object> configMap = new HashMap<>();
             configMap.put("restrictedProjectKeys", config.getRestrictedProjectKeys());
             configMap.put("echoMasterPrompt", config.getEchoMasterPrompt());
             configMap.put("echoEnabled", config.isEchoEnabled());
             configMap.put("echoMaxTokens", config.getEchoMaxTokens());
             configMap.put("echoDefaultModel", config.getEchoDefaultModel());
+
             // General Settings
             configMap.put("portalTitle", config.getPortalTitle());
             configMap.put("portalSubtitle", config.getPortalSubtitle());
@@ -119,12 +141,13 @@ public class GlobalConfigResource {
             configMap.put("maxRecentPortals", config.getMaxRecentPortals());
             configMap.put("sessionTimeoutMinutes", config.getSessionTimeoutMinutes());
             configMap.put("enableAnalytics", config.isEnableAnalytics());
+
             // Metadata
             configMap.put("updatedAt", config.getUpdatedAt());
             configMap.put("updatedBy", config.getUpdatedBy());
 
             log.info("Returning global config with {} restricted projects",
-                     config.getRestrictedProjectKeys().size());
+                    config.getRestrictedProjectKeys().size());
 
             return Response.ok(configMap).build();
 
@@ -168,13 +191,13 @@ public class GlobalConfigResource {
 
             GlobalConfigDTO saved = globalConfigService.saveGlobalConfig(config, currentUser.getUsername());
 
-            // Convert to Map to bypass Jackson serialization issues
             Map<String, Object> configMap = new HashMap<>();
             configMap.put("restrictedProjectKeys", saved.getRestrictedProjectKeys());
             configMap.put("echoMasterPrompt", saved.getEchoMasterPrompt());
             configMap.put("echoEnabled", saved.isEchoEnabled());
             configMap.put("echoMaxTokens", saved.getEchoMaxTokens());
             configMap.put("echoDefaultModel", saved.getEchoDefaultModel());
+
             // General Settings
             configMap.put("portalTitle", saved.getPortalTitle());
             configMap.put("portalSubtitle", saved.getPortalSubtitle());
@@ -188,6 +211,7 @@ public class GlobalConfigResource {
             configMap.put("maxRecentPortals", saved.getMaxRecentPortals());
             configMap.put("sessionTimeoutMinutes", saved.getSessionTimeoutMinutes());
             configMap.put("enableAnalytics", saved.isEnableAnalytics());
+
             // Metadata
             configMap.put("updatedAt", saved.getUpdatedAt());
             configMap.put("updatedBy", saved.getUpdatedBy());
@@ -200,6 +224,85 @@ public class GlobalConfigResource {
             log.error("Error saving global config", e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(createErrorResponse("Error saving global config: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * Get announcement banner config for administrators
+     * GET /rest/rail/1.0/admin/announcement-banner
+     */
+    @GET
+    @Path("announcement-banner")
+    public Response getAnnouncementBannerAdmin() {
+        log.info("GET /admin/announcement-banner - Fetching announcement banner config");
+
+        try {
+            ApplicationUser currentUser = authenticationContext.getLoggedInUser();
+            if (currentUser == null) {
+                return Response.status(Response.Status.UNAUTHORIZED)
+                        .entity(createErrorResponse("Authentication required"))
+                        .build();
+            }
+
+            if (!isAdmin(currentUser)) {
+                log.warn("Non-admin user {} attempted to access announcement banner config", currentUser.getUsername());
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Administrator access required"))
+                        .build();
+            }
+
+            AnnouncementBannerConfigDTO config = announcementBannerService.getConfig();
+            return Response.ok(toAnnouncementBannerMap(config)).build();
+
+        } catch (Exception e) {
+            log.error("Error fetching announcement banner config", e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error fetching announcement banner config: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * Save announcement banner config for administrators
+     * PUT /rest/rail/1.0/admin/announcement-banner
+     */
+    @PUT
+    @Path("announcement-banner")
+    public Response saveAnnouncementBannerAdmin(AnnouncementBannerConfigDTO config) {
+        log.info("PUT /admin/announcement-banner - Saving announcement banner config");
+
+        try {
+            ApplicationUser currentUser = authenticationContext.getLoggedInUser();
+            if (currentUser == null) {
+                return Response.status(Response.Status.UNAUTHORIZED)
+                        .entity(createErrorResponse("Authentication required"))
+                        .build();
+            }
+
+            if (!isAdmin(currentUser)) {
+                log.warn("Non-admin user {} attempted to save announcement banner config", currentUser.getUsername());
+                return Response.status(Response.Status.FORBIDDEN)
+                        .entity(createErrorResponse("Administrator access required"))
+                        .build();
+            }
+
+            if (config == null) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(createErrorResponse("Announcement banner payload is required"))
+                        .build();
+            }
+
+            AnnouncementBannerConfigDTO saved =
+                    announcementBannerService.saveConfig(config, currentUser.getUsername());
+
+            log.info("Saved announcement banner config by user {}", currentUser.getUsername());
+            return Response.ok(toAnnouncementBannerMap(saved)).build();
+
+        } catch (Exception e) {
+            log.error("Error saving announcement banner config", e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(createErrorResponse("Error saving announcement banner config: " + e.getMessage()))
                     .build();
         }
     }
@@ -347,7 +450,6 @@ public class GlobalConfigResource {
 
             GlobalConfigDTO config = globalConfigService.getGlobalConfig();
 
-            // Return only landing page relevant settings
             Map<String, Object> landingConfig = new HashMap<>();
             // Branding
             landingConfig.put("portalTitle", config.getPortalTitle());
@@ -371,5 +473,98 @@ public class GlobalConfigResource {
                     .build();
         }
     }
+}
+
+
+/**
+ * Get announcement banner config for authenticated landing-page users
+ * GET /rest/rail/1.0/announcement-banner
+ */
+@GET
+@Path("announcement-banner")
+public Response getAnnouncementBanner() {
+    log.debug("GET /announcement-banner - Fetching public announcement banner config");
+
+    try {
+        ApplicationUser currentUser = authenticationContext.getLoggedInUser();
+        if (currentUser == null) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(createErrorResponse("Authentication required"))
+                    .build();
+        }
+
+        AnnouncementBannerConfigDTO config = announcementBannerService.getConfig();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("enabled", config.isEnabled());
+        response.put("title", config.getTitle());
+        response.put("message", config.getMessage());
+        response.put("icon", config.getIcon());
+        response.put("backgroundColor", config.getBackgroundColor());
+        response.put("borderColor", config.getBorderColor());
+        response.put("textColor", config.getTextColor());
+        response.put("updatedBy", config.getUpdatedBy());
+        response.put("updatedAtEpochMs", config.getUpdatedAtEpochMs());
+
+        return Response.ok(response).build();
+
+    } catch (Exception e) {
+        log.error("Error fetching public announcement banner config", e);
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(createErrorResponse("Error fetching announcement banner config: " + e.getMessage()))
+                .build();
+    }
+}
+
+
+import com.samsungbuilder.jsm.dto.AnnouncementBannerConfigDTO;
+import com.samsungbuilder.jsm.service.AnnouncementBannerService;
+
+private final AnnouncementBannerService announcementBannerService;
+
+
+@Inject
+public RailPortalResource(
+        PortalRequestTypeService requestTypeService,
+        ProjectService projectService,
+        PortalConfigService portalConfigService,
+        IssueService issueService,
+        PortalAssetService portalAssetService,
+        AnnouncementBannerService announcementBannerService,
+        @ComponentImport JiraAuthenticationContext authenticationContext) {
+    this.requestTypeService = requestTypeService;
+    this.projectService = projectService;
+    this.portalConfigService = portalConfigService;
+    this.issueService = issueService;
+    this.portalAssetService = portalAssetService;
+    this.announcementBannerService = announcementBannerService;
+    this.authenticationContext = authenticationContext;
+}
+
+
+
+const API_BASE = "/rest/rail/1.0";
+
+export async function fetchAnnouncementBanner() {
+  return fetch(`${API_BASE}/announcement-banner`, {
+    credentials: "same-origin",
+  });
+}
+
+export async function fetchAnnouncementBannerAdmin() {
+  return fetch(`${API_BASE}/admin/announcement-banner`, {
+    credentials: "same-origin",
+  });
+}
+
+export async function saveAnnouncementBanner(payload: AnnouncementBannerConfig) {
+  return fetch(`${API_BASE}/admin/announcement-banner`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
