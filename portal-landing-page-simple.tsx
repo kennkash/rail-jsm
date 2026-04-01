@@ -1,3 +1,28 @@
+useEffect(() => {
+  let cancelled = false;
+
+  const loadAnnouncementBanner = async () => {
+    try {
+      const config = await fetchAnnouncementBanner();
+      if (!cancelled) {
+        setAnnouncementBanner(config);
+      }
+    } catch (error) {
+      console.error("Failed to load announcement banner", error);
+      if (!cancelled) {
+        setAnnouncementBanner(null);
+      }
+    }
+  };
+
+  void loadAnnouncementBanner();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+
 // /rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
 
 "use client";
