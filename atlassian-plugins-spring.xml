@@ -1,4 +1,4 @@
- <!-- backend/src/main/resources/META-INF/spring/atlassian-plugins-spring.xml -->
+<!-- backend/src/main/resources/META-INF/spring/atlassian-plugins-spring.xml -->
 
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
@@ -111,6 +111,12 @@
         <constructor-arg ref="pluginSettingsFactory"/>
     </bean>
 
+    <!-- Announcement Banner Service Bean -->
+    <bean id="announcementBannerService"
+          class="com.samsungbuilder.jsm.service.AnnouncementBannerService">
+        <constructor-arg ref="pluginSettingsFactory"/>
+    </bean>
+
     <!-- JAX-RS REST Resource Bean -->
     <bean id="railPortalResource"
           class="com.samsungbuilder.jsm.rest.RailPortalResource">
@@ -119,6 +125,7 @@
         <constructor-arg ref="portalConfigService"/>
         <constructor-arg ref="issueService"/>
         <constructor-arg ref="portalAssetService"/>
+        <constructor-arg ref="announcementBannerService"/>
         <constructor-arg ref="jiraAuthenticationContext"/>
     </bean>
 
@@ -127,6 +134,7 @@
           class="com.samsungbuilder.jsm.rest.GlobalConfigResource">
         <constructor-arg ref="globalConfigService"/>
         <constructor-arg ref="projectService"/>
+        <constructor-arg ref="announcementBannerService"/>
         <constructor-arg ref="jiraAuthenticationContext"/>
     </bean>
 
@@ -139,5 +147,8 @@
 
     <osgi:service id="globalConfigServiceExport" ref="globalConfigService"
                   interface="com.samsungbuilder.jsm.service.GlobalConfigService"/>
+
+    <osgi:service id="announcementBannerServiceExport" ref="announcementBannerService"
+                  interface="com.samsungbuilder.jsm.service.AnnouncementBannerService"/>
 
 </beans>
