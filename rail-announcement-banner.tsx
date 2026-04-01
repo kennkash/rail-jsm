@@ -1,3 +1,5 @@
+Scheduled maintenance this Sunday. <a href="https://your-link-here" target="_blank" rel="noopener noreferrer">View details</a>
+
 "use client";
 
 import DOMPurify from "isomorphic-dompurify";
