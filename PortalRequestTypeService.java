@@ -1,31 +1,3 @@
-RequestTypeQuery sortedQuery = jsdRequestTypeService.newQueryBuilder()
-        .serviceDesk(serviceDesk.getId())
-        .group(groupId)
-        .pagedRequest(SimplePagedRequest.paged(0, 100))
-        .requestOverrideSecurity(Boolean.TRUE)
-        .filterHidden(Boolean.TRUE)
-        .build();
-
-if (!groupMap.containsKey(groupId)) {
-    groupDiscoveryOrder.add(groupId);
-
-    RequestTypeGroupDTO newGroup = new RequestTypeGroupDTO(String.valueOf(groupId), group.getName());
-    newGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
-
-    // ✅ Use Jira’s configured group order (drag-and-drop order)
-    Optional<Integer> orderOpt = group.getOrder();
-    if (orderOpt.isPresent()) {
-        newGroup.setDisplayOrder(orderOpt.get());
-    } else {
-        // Fallback: stable discovery order
-        newGroup.setDisplayOrder(groupDiscoveryOrder.size());
-    }
-
-    newGroup.setRequestTypeCount(0);
-    groupMap.put(groupId, newGroup);
-}
-
-
 /* /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/service/PortalRequestTypeService.java */
 
 package com.samsungbuilder.jsm.service;
@@ -332,9 +304,16 @@ public class PortalRequestTypeService {
                         groupDiscoveryOrder.add(groupId);
                         RequestTypeGroupDTO newGroup = new RequestTypeGroupDTO(String.valueOf(groupId), group.getName());
                         newGroup.setServiceDeskId(String.valueOf(serviceDesk.getId()));
-                        
-                        // Default group display order is based on discovery order
-                        newGroup.setDisplayOrder(groupDiscoveryOrder.size());
+
+                        // Use Jira’s configured group order (drag-and-drop order)
+                        Optional<Integer> orderOpt = group.getOrder();
+                        if (orderOpt.isPresent()) {
+                            newGroup.setDisplayOrder(orderOpt.get());
+                        } else {
+                            // Fallback: stable discovery order
+                            newGroup.setDisplayOrder(groupDiscoveryOrder.size());
+                        }
+
                         newGroup.setRequestTypeCount(0);
                         groupMap.put(groupId, newGroup);
                     }
@@ -360,10 +339,12 @@ public class PortalRequestTypeService {
             try {
                 // This query IS sorted by JSM based on drag-and-drop order
                 RequestTypeQuery sortedQuery = jsdRequestTypeService.newQueryBuilder()
-                        .serviceDesk(serviceDesk.getId())
-                        .group(groupId)
-                        .pagedRequest(SimplePagedRequest.paged(0, 100))
-                        .build();
+                    .serviceDesk(serviceDesk.getId())
+                    .group(groupId)
+                    .pagedRequest(SimplePagedRequest.paged(0, 100))
+                    .requestOverrideSecurity(Boolean.TRUE)
+                    .filterHidden(Boolean.TRUE)
+                    .build();
 
                 List<RequestType> sortedTypes = jsdRequestTypeService.getRequestTypes(user, sortedQuery).getResults();
 
