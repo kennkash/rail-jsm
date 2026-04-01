@@ -1,17 +1,3 @@
-<div className="space-y-2">
-  <Label>Preview</Label>
-  <div className="rounded-md border bg-muted/30 p-3">
-    {form.enabled ? (
-      <RailAnnouncementBanner config={form} compact />
-    ) : (
-      <p className="text-sm text-muted-foreground">
-        Preview will appear here when the banner is enabled.
-      </p>
-    )}
-  </div>
-</div>
-
-
 // /rail-at-sas/frontend/components/admin/announcement-banner-settings-tab.tsx
 
 "use client";
@@ -179,7 +165,15 @@ export function AnnouncementBannerSettingsTab() {
 
                 <div className="space-y-2">
                     <Label>Preview</Label>
-                    <RailAnnouncementBanner config={form} className="border-0 bg-transparent px-0 py-0" />
+                    <div className="rounded-md border bg-muted/30 p-3">
+                        {form.enabled ? (
+                            <RailAnnouncementBanner config={form} compact />
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                Preview will appear here when the banner is enabled.
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex justify-end">
