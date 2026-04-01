@@ -1,11 +1,8 @@
-// /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/service/AnnouncementBannerServiceImpl.java
-
 package com.samsungbuilder.jsm.service;
 
+import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.atlassian.sal.api.pluginsettings.PluginSettings;
 import com.atlassian.sal.api.pluginsettings.PluginSettingsFactory;
-import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.samsungbuilder.jsm.dto.AnnouncementBannerConfigDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,12 +14,21 @@ import javax.inject.Named;
 public class AnnouncementBannerServiceImpl implements AnnouncementBannerService {
     private static final Logger log = LoggerFactory.getLogger(AnnouncementBannerServiceImpl.class);
 
-    private static final String STORAGE_KEY = "com.samsungbuilder.jsm.rail-portal.announcementBanner";
+    private static final String KEY_PREFIX = "com.samsungbuilder.jsm.rail-portal.announcementBanner.";
+    private static final String KEY_ENABLED = KEY_PREFIX + "enabled";
+    private static final String KEY_TITLE = KEY_PREFIX + "title";
+    private static final String KEY_MESSAGE = KEY_PREFIX + "message";
+    private static final String KEY_ICON = KEY_PREFIX + "icon";
+    private static final String KEY_BACKGROUND_COLOR = KEY_PREFIX + "backgroundColor";
+    private static final String KEY_BORDER_COLOR = KEY_PREFIX + "borderColor";
+    private static final String KEY_TEXT_COLOR = KEY_PREFIX + "textColor";
+    private static final String KEY_UPDATED_BY = KEY_PREFIX + "updatedBy";
+    private static final String KEY_UPDATED_AT = KEY_PREFIX + "updatedAtEpochMs";
+
     private static final int MAX_TITLE_LEN = 120;
     private static final int MAX_MESSAGE_LEN = 1000;
 
     private final PluginSettingsFactory pluginSettingsFactory;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
     public AnnouncementBannerServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory) {
@@ -33,13 +39,17 @@ public class AnnouncementBannerServiceImpl implements AnnouncementBannerService 
     public AnnouncementBannerConfigDTO getConfig() {
         try {
             PluginSettings settings = pluginSettingsFactory.createGlobalSettings();
-            Object raw = settings.get(STORAGE_KEY);
-            if (!(raw instanceof String) || ((String) raw).trim().isEmpty()) {
-                return AnnouncementBannerConfigDTO.defaultDisabled();
-            }
 
-            AnnouncementBannerConfigDTO dto =
-                objectMapper.readValue((String) raw, AnnouncementBannerConfigDTO.class);
+            AnnouncementBannerConfigDTO dto = AnnouncementBannerConfigDTO.defaultDisabled();
+            dto.setEnabled(parseBoolean(settings.get(KEY_ENABLED), false));
+            dto.setTitle(readString(settings.get(KEY_TITLE), ""));
+            dto.setMessage(readString(settings.get(KEY_MESSAGE), ""));
+            dto.setIcon(validateIcon(readString(settings.get(KEY_ICON), "info")));
+            dto.setBackgroundColor(validateHex(readString(settings.get(KEY_BACKGROUND_COLOR), "#EFF6FF"), "#EFF6FF"));
+            dto.setBorderColor(validateHex(readString(settings.get(KEY_BORDER_COLOR), "#BFDBFE"), "#BFDBFE"));
+            dto.setTextColor(validateHex(readString(settings.get(KEY_TEXT_COLOR), "#1E3A8A"), "#1E3A8A"));
+            dto.setUpdatedBy(readString(settings.get(KEY_UPDATED_BY), ""));
+            dto.setUpdatedAtEpochMs(parseLong(settings.get(KEY_UPDATED_AT)));
 
             return normalize(dto);
         } catch (Exception e) {
@@ -56,13 +66,23 @@ public class AnnouncementBannerServiceImpl implements AnnouncementBannerService 
 
         try {
             PluginSettings settings = pluginSettingsFactory.createGlobalSettings();
-            settings.put(STORAGE_KEY, objectMapper.writeValueAsString(normalized));
+            settings.put(KEY_ENABLED, String.valueOf(normalized.isEnabled()));
+            settings.put(KEY_TITLE, normalized.getTitle());
+            settings.put(KEY_MESSAGE, normalized.getMessage());
+            settings.put(KEY_ICON, normalized.getIcon());
+            settings.put(KEY_BACKGROUND_COLOR, normalized.getBackgroundColor());
+            settings.put(KEY_BORDER_COLOR, normalized.getBorderColor());
+            settings.put(KEY_TEXT_COLOR, normalized.getTextColor());
+            settings.put(KEY_UPDATED_BY, normalized.getUpdatedBy());
+            settings.put(KEY_UPDATED_AT, String.valueOf(normalized.getUpdatedAtEpochMs()));
+
             log.info(
                 "Saved RAIL announcement banner config. enabled={}, icon={}, updatedBy={}",
                 normalized.isEnabled(),
                 normalized.getIcon(),
                 updatedBy
             );
+
             return normalized;
         } catch (Exception e) {
             log.error("Failed to save announcement banner config", e);
@@ -111,5 +131,27 @@ public class AnnouncementBannerServiceImpl implements AnnouncementBannerService 
     private String validateHex(String value, String fallback) {
         String safe = value == null ? "" : value.trim();
         return safe.matches("^#([A-Fa-f0-9]{6})$") ? safe : fallback;
+    }
+
+    private String readString(Object raw, String fallback) {
+        return raw == null ? fallback : String.valueOf(raw).trim();
+    }
+
+    private boolean parseBoolean(Object raw, boolean fallback) {
+        if (raw == null) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
+    }
+
+    private Long parseLong(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(raw));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
