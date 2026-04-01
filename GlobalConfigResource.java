@@ -1,3 +1,25 @@
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project rail-portal-plugin: Compilation failure: Compilation failure: 
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/AnnouncementBannerResource.java:[6,40] cannot find symbol
+[ERROR]   symbol:   class GroupManager
+[ERROR]   location: package com.atlassian.crowd.embedded.api
+[ERROR] /mnt/k.kashmiry/git/rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/AnnouncementBannerResource.java:[29,19] cannot find symbol
+[ERROR]   symbol:   class GroupManager
+[ERROR]   location: class com.samsungbuilder.jsm.rest.AnnouncementBannerResource
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+ERROR: Backend build failed!
+
+
+I got the error above when trying to build the plugin, I think the GroupManager import needs to be import com.atlassian.jira.security.groups.GroupManager; instead.. just based on my other files. 
+
+Additionally, while I was looking for that import I came across the GlobalConfigResource.java file which seems to house all the admin rest api resources... it also handles the access it looks like. Should I just add my AnnouncementBannerResources in that file instead of making a seperate one?
+
+I have attached the file for your review.
 // /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/rest/GlobalConfigResource.java
 
 package com.samsungbuilder.jsm.rest;
