@@ -1,5 +1,6 @@
 package com.samsungbuilder.jsm.service;
 
+import com.atlassian.plugin.spring.scanner.annotation.export.ExportAsService;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.atlassian.sal.api.pluginsettings.PluginSettings;
 import com.atlassian.sal.api.pluginsettings.PluginSettingsFactory;
@@ -11,6 +12,7 @@ import javax.inject.Inject;
 import javax.inject.Named;
 
 @Named
+@ExportAsService({AnnouncementBannerService.class})
 public class AnnouncementBannerServiceImpl implements AnnouncementBannerService {
     private static final Logger log = LoggerFactory.getLogger(AnnouncementBannerServiceImpl.class);
 
