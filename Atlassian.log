@@ -1,6 +1,90 @@
 grep -nE "AnnouncementBanner|GlobalConfigResource|RailPortalResource|UnsatisfiedDependencyException|NoSuchBeanDefinitionException|plugin modules not enabled|Unable to resolve" atlassian-jira.log | less
 
 
-20111:2026-04-01 16:38:36,114-0500 UpmAsynchronousTaskManager:thread-1 ERROR kkashmiry0641     [c.a.p.osgi.factory.OsgiPlugin] Detected an error (BundleException) enabling the plugin 'com.samsungbuilder.jsm.rail-portal' : Unable to resolve com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0): missing requirement [com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0)] osgi.wiring.package; (osgi.wiring.package=com.fasterxml.jackson.databind) Unresolved requirements: [[com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0)] osgi.wiring.package; (osgi.wiring.package=com.fasterxml.jackson.databind)].  This error usually occurs when your plugin imports a package from another bundle with a specific version constraint and either the bundle providing that package doesn't meet those version constraints, or there is no bundle available that provides the specified package. For more details on how to fix this, see https://developer.atlassian.com/x/mQAN
-20213:Caused by: org.osgi.framework.BundleException: Unable to resolve com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0): missing requirement [com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0)] osgi.wiring.package; (osgi.wiring.package=com.fasterxml.jackson.databind) Unresolved requirements: [[com.samsungbuilder.jsm.rail-portal-plugin [317](R 317.0)] osgi.wiring.package; (osgi.wiring.package=com.fasterxml.jackson.databind)]
-
+  [c.a.p.osgi.factory.OsgiPlugin] Unable to start the plugin container for plugin 'com.samsungbuilder.jsm.rail-portal'
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'railPortalResource' defined in URL [bundle://1895e0ff-c8c5-4b40-b384-a4436b2259c8_319.0:0/META-INF/spring/atlassian-plugins-spring.xml]: Unsatisfied dependency expressed through constructor parameter 5; nested exception is org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:794)
+        at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:220)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1372)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1222)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:582)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:542)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:336)
+        at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:334)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:209)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:955)
+        at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:932)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.access$1600(AbstractDelegatedExecutionApplicationContext.java:57)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext$4.run(AbstractDelegatedExecutionApplicationContext.java:322)
+        at org.eclipse.gemini.blueprint.util.internal.PrivilegedUtils.executeWithCustomTCCL(PrivilegedUtils.java:85)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.completeRefresh(AbstractDelegatedExecutionApplicationContext.java:287)
+        at org.eclipse.gemini.blueprint.extender.internal.dependencies.startup.DependencyWaiterApplicationContextExecutor$CompleteRefreshTask.run(DependencyWaiterApplicationContextExecutor.java:137)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+        at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:1801)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1357)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1311)
+        at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:904)
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:781)
+        ... 19 more
+2026-04-01 17:05:20,526-0500 ThreadPoolAsyncTaskExecutor::Thread 42 ERROR      [o.e.g.b.e.internal.support.ExtenderConfiguration] Application context refresh failed (NonValidatingOsgiBundleXmlApplicationContext(bundle=com.samsungbuilder.jsm.rail-portal-plugin, config=osgibundle:/META-INF/spring/*.xml))
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'railPortalResource' defined in URL [bundle://1895e0ff-c8c5-4b40-b384-a4436b2259c8_319.0:0/META-INF/spring/atlassian-plugins-spring.xml]: Unsatisfied dependency expressed through constructor parameter 5; nested exception is org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:794)
+        at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:220)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1372)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1222)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:582)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:542)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:336)
+        at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:334)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:209)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:955)
+        at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:932)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.access$1600(AbstractDelegatedExecutionApplicationContext.java:57)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext$4.run(AbstractDelegatedExecutionApplicationContext.java:322)
+        at org.eclipse.gemini.blueprint.util.internal.PrivilegedUtils.executeWithCustomTCCL(PrivilegedUtils.java:85)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.completeRefresh(AbstractDelegatedExecutionApplicationContext.java:287)
+        at org.eclipse.gemini.blueprint.extender.internal.dependencies.startup.DependencyWaiterApplicationContextExecutor$CompleteRefreshTask.run(DependencyWaiterApplicationContextExecutor.java:137)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+        at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:1801)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1357)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1311)
+        at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:904)
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:781)
+        ... 19 more
+2026-04-01 17:05:20,526-0500 ThreadPoolAsyncTaskExecutor::Thread 42 ERROR      [o.e.g.b.e.i.dependencies.startup.DependencyWaiterApplicationContextExecutor] Unable to create application context for [com.samsungbuilder.jsm.rail-portal-plugin], unsatisfied dependencies: none
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'railPortalResource' defined in URL [bundle://1895e0ff-c8c5-4b40-b384-a4436b2259c8_319.0:0/META-INF/spring/atlassian-plugins-spring.xml]: Unsatisfied dependency expressed through constructor parameter 5; nested exception is org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:794)
+        at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:220)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1372)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1222)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:582)
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:542)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:336)
+        at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:334)
+        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:209)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:955)
+        at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:932)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.access$1600(AbstractDelegatedExecutionApplicationContext.java:57)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext$4.run(AbstractDelegatedExecutionApplicationContext.java:322)
+        at org.eclipse.gemini.blueprint.util.internal.PrivilegedUtils.executeWithCustomTCCL(PrivilegedUtils.java:85)
+        at org.eclipse.gemini.blueprint.context.support.AbstractDelegatedExecutionApplicationContext.completeRefresh(AbstractDelegatedExecutionApplicationContext.java:287)
+        at org.eclipse.gemini.blueprint.extender.internal.dependencies.startup.DependencyWaiterApplicationContextExecutor$CompleteRefreshTask.run(DependencyWaiterApplicationContextExecutor.java:137)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+        at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.samsungbuilder.jsm.service.AnnouncementBannerService' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:1801)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1357)
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1311)
+        at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:904)
+        at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:781)
+        ... 19 more
