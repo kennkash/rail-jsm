@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Info, TriangleAlert, BadgeAlert, Megaphone, CircleAlert, CheckCircle2 } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ const DEFAULTS: AnnouncementBannerConfig = {
   textColor: "#1E3A8A",
 };
 
-export function AnnouncementBannerAdminCard() {
+export function AnnouncementBannerSettingsTab() {
   const [form, setForm] = useState<AnnouncementBannerConfig>(DEFAULTS);
   const [isSaving, setIsSaving] = useState(false);
 
