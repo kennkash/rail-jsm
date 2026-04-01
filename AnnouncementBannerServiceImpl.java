@@ -4,6 +4,7 @@ package com.samsungbuilder.jsm.service;
 
 import com.atlassian.sal.api.pluginsettings.PluginSettings;
 import com.atlassian.sal.api.pluginsettings.PluginSettingsFactory;
+import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.samsungbuilder.jsm.dto.AnnouncementBannerConfigDTO;
 import org.slf4j.Logger;
@@ -24,7 +25,7 @@ public class AnnouncementBannerServiceImpl implements AnnouncementBannerService 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
-    public AnnouncementBannerServiceImpl(PluginSettingsFactory pluginSettingsFactory) {
+    public AnnouncementBannerServiceImpl(@ComponentImport PluginSettingsFactory pluginSettingsFactory) {
         this.pluginSettingsFactory = pluginSettingsFactory;
     }
 
