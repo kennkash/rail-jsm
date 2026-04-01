@@ -1,28 +1,3 @@
-useEffect(() => {
-  let cancelled = false;
-
-  const loadAnnouncementBanner = async () => {
-    try {
-      const config = await fetchAnnouncementBanner();
-      if (!cancelled) {
-        setAnnouncementBanner(config);
-      }
-    } catch (error) {
-      console.error("Failed to load announcement banner", error);
-      if (!cancelled) {
-        setAnnouncementBanner(null);
-      }
-    }
-  };
-
-  void loadAnnouncementBanner();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-
 // /rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
 
 "use client";
@@ -30,7 +5,7 @@ useEffect(() => {
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, FolderTree, Search, Loader2, ListTodo, CheckCircle, ClipboardList, Info, ExternalLink} from "lucide-react";
+import { Clock, FolderTree, Search, Loader2, ListTodo, CheckCircle, ClipboardList, Info, ExternalLink } from "lucide-react";
 import { CloudGPTIcon } from "@/components/ui/cloudgpt-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +21,8 @@ import { ECHO_SIDEBAR_WIDTH } from "@/lib/echo-config";
 import { CustomerPortalUserMenu } from "@/components/portal/customer-portal-user-menu";
 import { LandingHeroBanner } from "@/components/landing/landing-hero-banner";
 import { StandaloneJQLTable } from "@/components/landing/standalone-jql-table";
+import { fetchAnnouncementBanner, type AnnouncementBannerConfig } from "@/lib/api/announcement-banner-client";
+import { RailAnnouncementBanner } from "./rail-announcement-banner";
 import type { PortalInfo } from "@/lib/api/portals-client";
 import { searchProjects } from "@/lib/api/projects-client";
 import { ROUTE_PATHS } from "@/types/router";
@@ -64,7 +41,7 @@ const QUERY_TO_TAB: Record<string, TabValue> = {
   "myrequests": "requests",
   "myapprovals": "approvals",
   "assignee": "assigned"
-  
+
 };
 
 // Map tab values to query param values
@@ -73,7 +50,7 @@ const TAB_TO_QUERY: Record<TabValue, string> = {
   recent: "recent",
   requests: "myrequests",
   approvals: "myapprovals",
-  assigned:  "assignee"
+  assigned: "assignee"
 };
 
 type BootstrapWindow = typeof window & {
@@ -119,6 +96,7 @@ export function PortalLandingPageSimple() {
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
   const [isGlobalSearching, setIsGlobalSearching] = useState(false);
   const [globalSearchError, setGlobalSearchError] = useState<string | null>(null);
+  const [announcementBanner, setAnnouncementBanner] = useState<AnnouncementBannerConfig | null>(null);
 
   // Info icon popover state
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -131,13 +109,38 @@ export function PortalLandingPageSimple() {
     }
   }, [searchParams, activeTab, getTabFromQuery]);
 
+  // Load announcement banner
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAnnouncementBanner = async () => {
+      try {
+        const config = await fetchAnnouncementBanner();
+        if (!cancelled) {
+          setAnnouncementBanner(config);
+        }
+      } catch (error) {
+        console.error("Failed to load announcement banner", error);
+        if (!cancelled) {
+          setAnnouncementBanner(null);
+        }
+      }
+    };
+
+    void loadAnnouncementBanner();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Handle tab changes by navigating to the corresponding URL with query param
   const setActiveTab = useCallback((tab: TabValue) => {
-      const queryValue = TAB_TO_QUERY[tab];
-      const basePath = ROUTE_PATHS.CUSTOMER_PORTAL;
-      const targetUrl = queryValue ? `${basePath}?tab=${queryValue}` : basePath;
-      navigate(targetUrl);
-      setActiveTabState(tab);
+    const queryValue = TAB_TO_QUERY[tab];
+    const basePath = ROUTE_PATHS.CUSTOMER_PORTAL;
+    const targetUrl = queryValue ? `${basePath}?tab=${queryValue}` : basePath;
+    navigate(targetUrl);
+    setActiveTabState(tab);
   }, [navigate]);
 
   // Echo AI state
@@ -300,7 +303,7 @@ export function PortalLandingPageSimple() {
           </div>
         </div>
       </header>
-
+      <RailAnnouncementBanner config={announcementBanner} />
       {/* Main Content */}
       <main
         className="flex-1 overflow-y-auto"
