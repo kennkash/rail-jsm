@@ -1,0 +1,143 @@
+ <!-- backend/src/main/resources/META-INF/spring/atlassian-plugins-spring.xml -->
+
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:osgi="http://www.springframework.org/schema/osgi"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans.xsd
+                           http://www.springframework.org/schema/osgi
+                           http://www.springframework.org/schema/osgi/spring-osgi.xsd">
+
+    <!--
+    Manual Spring Bean Configuration for RAIL Portal Plugin
+
+    This file explicitly defines Spring beans and imports Atlassian OSGi services.
+    OSGi services (projectManager, avatarService, etc.) must be imported using osgi:reference.
+    -->
+
+    <!-- Import Atlassian OSGi Services -->
+    <osgi:reference id="projectManager"
+                    interface="com.atlassian.jira.project.ProjectManager"/>
+
+    <osgi:reference id="avatarService"
+                    interface="com.atlassian.jira.avatar.AvatarService"/>
+
+    <osgi:reference id="projectPropertyService"
+                    interface="com.atlassian.jira.bc.project.property.ProjectPropertyService"/>
+
+    <osgi:reference id="searchService"
+                    interface="com.atlassian.jira.bc.issue.search.SearchService"/>
+
+    <osgi:reference id="issueManager"
+                    interface="com.atlassian.jira.issue.IssueManager"/>
+
+    <osgi:reference id="jiraIssueService"
+                    interface="com.atlassian.jira.bc.issue.IssueService"/>
+
+    <osgi:reference id="attachmentManager"
+                    interface="com.atlassian.jira.issue.AttachmentManager"/>
+
+    <osgi:reference id="jiraAuthenticationContext"
+                    interface="com.atlassian.jira.security.JiraAuthenticationContext"/>
+
+    <osgi:reference id="permissionManager"
+                    interface="com.atlassian.jira.security.PermissionManager"/>
+
+    <osgi:reference id="pluginSettingsFactory"
+                    interface="com.atlassian.sal.api.pluginsettings.PluginSettingsFactory"/>
+
+    <osgi:reference id="serviceDeskManager"
+                    interface="com.atlassian.servicedesk.api.ServiceDeskManager"/>
+
+    <osgi:reference id="serviceDeskCustomerRequestService"
+                    interface="com.atlassian.servicedesk.api.request.ServiceDeskCustomerRequestService"/>
+
+    <osgi:reference id="jsmRequestTypeService"
+                    interface="com.atlassian.servicedesk.api.requesttype.RequestTypeService"/>
+
+    <!-- Request Type Service Bean -->
+    <bean id="requestTypeService"
+          class="com.samsungbuilder.jsm.service.PortalRequestTypeService">
+        <constructor-arg ref="projectManager"/>
+        <constructor-arg ref="serviceDeskManager"/>
+        <constructor-arg ref="jsmRequestTypeService"/>
+        <constructor-arg ref="jiraAuthenticationContext"/>
+    </bean>
+
+    <!-- Project Service Bean -->
+    <bean id="projectService"
+          class="com.samsungbuilder.jsm.service.ProjectService">
+        <constructor-arg ref="projectManager"/>
+        <constructor-arg ref="avatarService"/>
+    </bean>
+
+    <!-- Issue Service Bean (for JQL table and issue search endpoints) -->
+    <bean id="issueService"
+          class="com.samsungbuilder.jsm.service.IssueService">
+        <constructor-arg ref="searchService"/>
+        <constructor-arg ref="issueManager"/>
+        <constructor-arg ref="projectManager"/>
+        <constructor-arg ref="jiraAuthenticationContext"/>
+        <constructor-arg ref="avatarService"/>
+        <constructor-arg ref="permissionManager"/>
+        <constructor-arg ref="serviceDeskCustomerRequestService"/>
+        <constructor-arg ref="serviceDeskManager"/>
+    </bean>
+
+    <!-- Portal Config Service Bean -->
+    <bean id="portalConfigService"
+          class="com.samsungbuilder.jsm.service.PortalConfigService">
+        <constructor-arg ref="projectManager"/>
+        <constructor-arg ref="pluginSettingsFactory"/>
+        <constructor-arg ref="projectPropertyService"/>
+        <constructor-arg ref="serviceDeskManager"/>
+    </bean>
+
+    <!-- Portal Asset Service Bean -->
+    <bean id="portalAssetService"
+          class="com.samsungbuilder.jsm.service.PortalAssetService">
+        <constructor-arg ref="projectManager"/>
+        <constructor-arg ref="pluginSettingsFactory"/>
+        <constructor-arg ref="issueManager"/>
+        <constructor-arg ref="jiraIssueService"/>
+        <constructor-arg ref="attachmentManager"/>
+        <constructor-arg ref="jiraAuthenticationContext"/>
+    </bean>
+
+    <!-- Global Config Service Bean -->
+    <bean id="globalConfigService"
+          class="com.samsungbuilder.jsm.service.GlobalConfigService">
+        <constructor-arg ref="pluginSettingsFactory"/>
+    </bean>
+
+    <!-- JAX-RS REST Resource Bean -->
+    <bean id="railPortalResource"
+          class="com.samsungbuilder.jsm.rest.RailPortalResource">
+        <constructor-arg ref="requestTypeService"/>
+        <constructor-arg ref="projectService"/>
+        <constructor-arg ref="portalConfigService"/>
+        <constructor-arg ref="issueService"/>
+        <constructor-arg ref="portalAssetService"/>
+        <constructor-arg ref="jiraAuthenticationContext"/>
+    </bean>
+
+    <!-- Global Config REST Resource Bean -->
+    <bean id="globalConfigResource"
+          class="com.samsungbuilder.jsm.rest.GlobalConfigResource">
+        <constructor-arg ref="globalConfigService"/>
+        <constructor-arg ref="projectService"/>
+        <constructor-arg ref="jiraAuthenticationContext"/>
+    </bean>
+
+    <!--
+    Export plugin services as OSGi services so they can be accessed via ComponentAccessor
+    in non-Spring-managed components like servlets.
+    -->
+    <osgi:service id="portalConfigServiceExport" ref="portalConfigService"
+                  interface="com.samsungbuilder.jsm.service.PortalConfigService"/>
+
+    <osgi:service id="globalConfigServiceExport" ref="globalConfigService"
+                  interface="com.samsungbuilder.jsm.service.GlobalConfigService"/>
+
+</beans>
