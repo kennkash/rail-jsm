@@ -1,3 +1,5 @@
+// /rail-at-sas/backend/src/main/java/com/samsungbuilder/jsm/dto/AnnouncementBannerConfigDTO.java
+
 package com.samsungbuilder.jsm.dto;
 
 import java.util.Objects;
