@@ -1,0 +1,1 @@
+grep -nE "AnnouncementBanner|GlobalConfigResource|RailPortalResource|UnsatisfiedDependencyException|NoSuchBeanDefinitionException|plugin modules not enabled|Unable to resolve" atlassian-jira.log | less
