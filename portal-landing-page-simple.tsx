@@ -1,3 +1,5 @@
+// /rail-at-sas/frontend/components/landing/portal-landing-page-simple.tsx
+
 "use client";
 
 import { useCallback, useMemo, useState, useEffect } from "react";
@@ -280,10 +282,7 @@ export function PortalLandingPageSimple() {
         style={echoEnabled && isEchoVisible ? { paddingRight: ECHO_SIDEBAR_WIDTH } : undefined}
       >
         {/* Hero Banner */}
-        <LandingHeroBanner
-          visiblePortals={visiblePortals}
-          onPortalSelect={handleSelect}
-        />
+        <LandingHeroBanner />
 
         <div className="px-6 py-8">
           <div className="max-w-5xl mx-auto space-y-6">
@@ -333,7 +332,7 @@ export function PortalLandingPageSimple() {
                   </div>
                   {/* Portal List */}
                   <div className="flex-1">
-                    {/* <div className="mb-4">
+                    <div className="mb-4">
                       <div className="relative max-w-sm">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
@@ -365,7 +364,7 @@ export function PortalLandingPageSimple() {
                       {globalSearchError && (
                         <p className="mt-1 text-xs text-destructive">{globalSearchError}</p>
                       )}
-                    </div> */}
+                    </div>
                     {isLoading && <p className="text-sm text-muted-foreground">Loading portals...</p>}
                     {!isLoading && filteredPortals.length === 0 && (
                       <EmptyState icon={FolderTree} title="No portals found" subtitle="Try a different search or filter" />
