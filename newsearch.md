@@ -1,3 +1,35 @@
+Result Priority
+How Results are Matched
+
+The search looks for the best matches in this order:
+
+Exact match
+Starts with
+Contains
+Fuzzy match for close misspellings
+
+Exact matches are still prioritized over fuzzy matches, so the most relevant results should appear first.
+
+How Results are Ranked
+
+Search results are sorted by relevance.
+
+In general results are ranked in this order:
+
+Project name
+Project key
+Project description/keyword
+Request type name
+
+If two results are similarly relevant, portal results appear before request type results.
+
+This means:
+
+If a portal name matches your search, that will show before a description match.
+If a portal description matches and a request type also matches, the portal can still appear first if it ranks higher.
+
+
+
 # How Portal Search Works
 
 The portal search has been updated to make it easier to find the right result, even if your search is not perfectly spelled.
