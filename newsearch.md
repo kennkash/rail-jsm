@@ -1,3 +1,6 @@
+Confluence, Jira, RAIL, Atlassian Cloud, Create a Confluence group, Create a Jira group, Create a Confluence space, Create a Jira project, Request a Jira license, JSM, Jira Service Management, Jira project configuration, Add fields to a Jira project, Add options to a Jira field, HQ access to Confluence, HQ access to Jira
+
+
 Here’s a good blurb you could use:
 
 “Project descriptions now play an important role in search. Adding clear keywords to your project’s description helps users find the right portal more quickly, especially when they may not know the exact project name or request type. Including common terms, tool names, team names, and service-related keywords improves search relevance and makes your portal easier to discover.”  ￼
