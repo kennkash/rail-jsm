@@ -460,7 +460,6 @@ function getTextPartsWithFuzzyHighlights(
   return parts;
 }
 
-
 function getTextPartsWithHighlights(
   text: string,
   query: string
@@ -546,6 +545,77 @@ function getHighlightedSnippet(text: string, query: string, radius = 55): ReactN
       {suffix}
     </>
   );
+}
+
+function splitDescriptionSegments(text: string): string[] {
+  if (!text?.trim()) return [];
+
+  return text
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function getBestDescriptionSegment(text: string, query: string): string | null {
+  const segments = splitDescriptionSegments(text);
+  const queryTokens = tokenizeQuery(query).filter((token) => token.length >= 2);
+
+  if (!segments.length || !queryTokens.length) return null;
+
+  let best:
+    | {
+        segment: string;
+        score: number;
+      }
+    | null = null;
+
+  for (const segment of segments) {
+    const normalizedSegment = normalizeSearchText(segment);
+    if (!normalizedSegment) continue;
+
+    const matchesAll = queryTokens.every((token) =>
+      fieldMatchesToken(normalizedSegment, token)
+    );
+
+    if (!matchesAll) continue;
+
+    const score = getBestFuzzyTokenScore(
+      queryTokens,
+      normalizedSegment,
+      2000,
+      300,
+      150,
+      75,
+      30
+    );
+
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = {
+        segment,
+        score,
+      };
+    }
+  }
+
+  return best?.segment ?? null;
+}
+
+function getHighlightedDescriptionSnippet(
+  text: string,
+  query: string,
+  radius = 55
+): ReactNode {
+  if (!text?.trim()) return text;
+
+  const bestSegment = getBestDescriptionSegment(text, query);
+
+  if (bestSegment) {
+    return getHighlightedSnippet(bestSegment, query, radius);
+  }
+
+  return getHighlightedSnippet(text, query, radius);
 }
 
 export function LandingHeroBanner({
@@ -707,25 +777,25 @@ export function LandingHeroBanner({
   }, [portalProjects]);
 
   const portalDocs = useMemo<PortalSearchDoc[]>(() => {
-  return visiblePortals
-    .filter((portal) => !!portal.projectKey && !!portal.projectName)
-    .map((portal) => {
-      const project = projectsByKey.get(portal.projectKey.toUpperCase());
-      const description = truncateDescriptionForSearch(project?.description);
+    return visiblePortals
+      .filter((portal) => !!portal.projectKey && !!portal.projectName)
+      .map((portal) => {
+        const project = projectsByKey.get(portal.projectKey.toUpperCase());
+        const description = truncateDescriptionForSearch(project?.description);
 
-      return {
-        id: `portal:${portal.projectKey}`,
-        type: "portal",
-        portal,
-        projectName: portal.projectName ?? "",
-        projectKey: portal.projectKey ?? "",
-        description,
-        normalizedProjectName: normalizeSearchText(portal.projectName),
-        normalizedProjectKey: normalizeSearchText(portal.projectKey),
-        normalizedDescription: normalizeSearchText(description),
-      };
-    });
-}, [visiblePortals, projectsByKey]);
+        return {
+          id: `portal:${portal.projectKey}`,
+          type: "portal",
+          portal,
+          projectName: portal.projectName ?? "",
+          projectKey: portal.projectKey ?? "",
+          description,
+          normalizedProjectName: normalizeSearchText(portal.projectName),
+          normalizedProjectKey: normalizeSearchText(portal.projectKey),
+          normalizedDescription: normalizeSearchText(description),
+        };
+      });
+  }, [visiblePortals, projectsByKey]);
 
   const requestTypeDocs = useMemo<RequestTypeSearchDoc[]>(() => {
     return enrichedRequestTypeResults.map((result) => ({
@@ -1030,44 +1100,44 @@ export function LandingHeroBanner({
   );
 
   const requestTypeResults = useMemo(() => {
-  const requestTypes = combinedResults.filter(
-    (item): item is Extract<SearchResultItem, { type: "requestType" }> =>
-      item.type === "requestType"
-  );
+    const requestTypes = combinedResults.filter(
+      (item): item is Extract<SearchResultItem, { type: "requestType" }> =>
+        item.type === "requestType"
+    );
 
-  const rankedPortals = combinedResults.filter(
-    (item): item is Extract<SearchResultItem, { type: "portal" }> =>
-      item.type === "portal"
-  );
+    const rankedPortals = combinedResults.filter(
+      (item): item is Extract<SearchResultItem, { type: "portal" }> =>
+        item.type === "portal"
+    );
 
-  const portalRankByProjectKey = new Map<string, number>();
+    const portalRankByProjectKey = new Map<string, number>();
 
-  rankedPortals.forEach((portal, index) => {
-    portalRankByProjectKey.set(portal.projectKey.toUpperCase(), index);
-  });
+    rankedPortals.forEach((portal, index) => {
+      portalRankByProjectKey.set(portal.projectKey.toUpperCase(), index);
+    });
 
-  return [...requestTypes].sort((a, b) => {
-    const aPortalRank = portalRankByProjectKey.get(a.result.projectKey.toUpperCase());
-    const bPortalRank = portalRankByProjectKey.get(b.result.projectKey.toUpperCase());
+    return [...requestTypes].sort((a, b) => {
+      const aPortalRank = portalRankByProjectKey.get(a.result.projectKey.toUpperCase());
+      const bPortalRank = portalRankByProjectKey.get(b.result.projectKey.toUpperCase());
 
-    const aHasMatchingPortal = aPortalRank !== undefined;
-    const bHasMatchingPortal = bPortalRank !== undefined;
+      const aHasMatchingPortal = aPortalRank !== undefined;
+      const bHasMatchingPortal = bPortalRank !== undefined;
 
-    // Request types tied to matched portals come first
-    if (aHasMatchingPortal && !bHasMatchingPortal) return -1;
-    if (!aHasMatchingPortal && bHasMatchingPortal) return 1;
+      // Request types tied to matched portals come first
+      if (aHasMatchingPortal && !bHasMatchingPortal) return -1;
+      if (!aHasMatchingPortal && bHasMatchingPortal) return 1;
 
-    // If both belong to matched portals, follow the portal ranking
-    if (aHasMatchingPortal && bHasMatchingPortal && aPortalRank !== bPortalRank) {
-      return aPortalRank! - bPortalRank!;
-    }
+      // If both belong to matched portals, follow the portal ranking
+      if (aHasMatchingPortal && bHasMatchingPortal && aPortalRank !== bPortalRank) {
+        return aPortalRank! - bPortalRank!;
+      }
 
-    // Within the same portal bucket, preserve normal request type score ordering
-    if (b.score !== a.score) return b.score - a.score;
+      // Within the same portal bucket, preserve normal request type score ordering
+      if (b.score !== a.score) return b.score - a.score;
 
-    return a.result.requestType.name.localeCompare(b.result.requestType.name);
-  });
-}, [combinedResults]);
+      return a.result.requestType.name.localeCompare(b.result.requestType.name);
+    });
+  }, [combinedResults]);
 
   const hasPortalResults = portalResults.length > 0;
   const hasRequestTypeResults = requestTypeResults.length > 0;
@@ -1148,7 +1218,7 @@ export function LandingHeroBanner({
         {item.description && (
           <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
             {item.matchedOn === "description"
-              ? getHighlightedSnippet(item.description, debouncedSearchTerm)
+              ? getHighlightedDescriptionSnippet(item.description, debouncedSearchTerm)
               : item.description}
           </div>
         )}
@@ -1255,16 +1325,16 @@ export function LandingHeroBanner({
         </div>
       </div>
 
-      <Dialog 
-      open={isSearchOpen} 
-      onOpenChange={(open) => { 
-        setIsSearchOpen(open);
-        
-        if (!open) {
-          setSearchTerm("");
-          setDebouncedSearchTerm('');
-        }
-      }}
+      <Dialog
+        open={isSearchOpen}
+        onOpenChange={(open) => {
+          setIsSearchOpen(open);
+
+          if (!open) {
+            setSearchTerm("");
+            setDebouncedSearchTerm("");
+          }
+        }}
       >
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -1278,79 +1348,63 @@ export function LandingHeroBanner({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             )}
             <Input
-              type="search"
               autoFocus
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search portals, keywords, or request types..."
-              className="pl-10 pr-4 py-5 text-base"
+              className="pl-10"
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto mt-4 -mx-6 px-6">
-            {projectsError && (
-              <div className="mb-3 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {shouldShowTabs && (
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SearchTab)} className="mt-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="portal">
+                  Portals
+                  {hasPortalResults ? ` (${portalResults.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="requestType">
+                  Request Types
+                  {hasRequestTypeResults ? ` (${requestTypeResults.length})` : ""}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+
+          <div className="mt-4 flex-1 overflow-y-auto min-h-[240px]">
+            {debouncedSearchTerm.length < 2 ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">
+                Type at least 2 characters to search.
+              </div>
+            ) : isSearching ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">
+                Searching portals and request types...
+              </div>
+            ) : projectsError ? (
+              <div className="text-sm text-destructive py-8 text-center">
                 {projectsError}
               </div>
-            )}
-
-            {isSearching ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+            ) : !hasSearchResults ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">
+                No results found for "{debouncedSearchTerm}".
               </div>
-            ) : debouncedSearchTerm.length >= 2 ? (
-              hasSearchResults ? (
-                <div className="space-y-4 pb-2">
-                  {shouldShowTabs && (
-                    <div className="sticky top-0 z-10 bg-background pb-2">
-                      <Tabs
-                        value={activeTab}
-                        onValueChange={(value) => setActiveTab(value as SearchTab)}
-                      >
-                        <TabsList>
-                          <TabsTrigger
-                            value="portal"
-                            disabled={!hasPortalResults}
-                            className="cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            Portals
-                            <span className="ml-1.5 text-xs">({portalResults.length})</span>
-                          </TabsTrigger>
-
-                          <TabsTrigger
-                            value="requestType"
-                            disabled={!hasRequestTypeResults}
-                            className="cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            Request Types
-                            <span className="ml-1.5 text-xs">({requestTypeResults.length})</span>
-                          </TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    {activeTab === "portal"
-                      ? portalResults.map((item) =>
-                        renderPortalResult(item as Extract<SearchResultItem, { type: "portal" }>)
-                      )
-                      : requestTypeResults.map((item) =>
-                        renderRequestTypeResult(
-                          item as Extract<SearchResultItem, { type: "requestType" }>
-                        )
-                      )}
-                  </div>
-                </div>
-              ) : (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  No portals or request types found for &quot;{debouncedSearchTerm}&quot;
-                </div>
-              )
             ) : (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                Type at least 2 characters to search
+              <div className="space-y-2">
+                {activeTab === "portal" ? (
+                  hasPortalResults ? (
+                    portalResults.map((item) => renderPortalResult(item))
+                  ) : (
+                    <div className="text-sm text-muted-foreground py-8 text-center">
+                      No portal matches found.
+                    </div>
+                  )
+                ) : hasRequestTypeResults ? (
+                  requestTypeResults.map((item) => renderRequestTypeResult(item))
+                ) : (
+                  <div className="text-sm text-muted-foreground py-8 text-center">
+                    No request type matches found.
+                  </div>
+                )}
               </div>
             )}
           </div>
