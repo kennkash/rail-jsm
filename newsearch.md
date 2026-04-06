@@ -1,3 +1,19 @@
+Here’s a good blurb you could use:
+
+“Project descriptions now play an important role in search. Adding clear keywords to your project’s description helps users find the right portal more quickly, especially when they may not know the exact project name or request type. Including common terms, tool names, team names, and service-related keywords improves search relevance and makes your portal easier to discover.”  ￼
+
+A slightly more polished version:
+
+“As portal search becomes more keyword-driven, project descriptions are now one of the best ways to improve discoverability. By adding meaningful keywords to your project description, you help users find the correct portal even if they search by tool, service, topic, or team name instead of the exact portal title. Keeping descriptions current makes search results more accurate and helps guide users to the right place faster.”  ￼
+
+A shorter admin-facing version:
+
+“Updating your project description with relevant keywords helps users find your portal more easily in search. Think of it as adding search terms your users are likely to type, even if those words are not in the portal name.”  ￼
+
+If you want, I can also make it sound more technical, more user-friendly, or more like a release note.
+
+
+
 Result Priority
 How Results are Matched
 
