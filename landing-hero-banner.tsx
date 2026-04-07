@@ -1,3 +1,115 @@
+function highlightTextWithRanges(text: string, ranges: HighlightRange[]): ReactNode {
+  if (!text?.trim()) return text;
+  if (!ranges.length) return text;
+
+  const merged = mergeHighlightRanges(ranges);
+  const parts: Array<{ text: string; highlight: boolean }> = [];
+  let cursor = 0;
+
+  for (const range of merged) {
+    if (range.start > cursor) {
+      parts.push({
+        text: text.slice(cursor, range.start),
+        highlight: false,
+      });
+    }
+
+    parts.push({
+      text: text.slice(range.start, range.end),
+      highlight: true,
+    });
+
+    cursor = range.end;
+  }
+
+  if (cursor < text.length) {
+    parts.push({
+      text: text.slice(cursor),
+      highlight: false,
+    });
+  }
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.highlight ? (
+          <mark
+            key={`${part.text}-${index}`}
+            className="rounded bg-yellow-200/70 px-0.5 text-inherit"
+          >
+            {part.text}
+          </mark>
+        ) : (
+          <span key={`${part.text}-${index}`}>{part.text}</span>
+        )
+      )}
+    </>
+  );
+}
+
+function getHighlightedDescriptionSnippet(
+  text: string,
+  query: string,
+  radius = 55
+): ReactNode {
+  if (!text?.trim()) return text;
+
+  const bestSegment = getBestDescriptionSegment(text, query);
+
+  // Fallback to original behavior if we don't get a strong segment match
+  if (!bestSegment) {
+    return getHighlightedSnippet(text, query, radius);
+  }
+
+  const segmentIndex = text.toLowerCase().indexOf(bestSegment.toLowerCase());
+  if (segmentIndex === -1) {
+    return getHighlightedSnippet(text, query, radius);
+  }
+
+  // Get highlight ranges ONLY within the chosen best segment
+  const segmentRanges = getFuzzyHighlightRanges(bestSegment, query);
+
+  // If no fuzzy ranges resolved, just highlight the full chosen segment
+  const effectiveSegmentRanges =
+    segmentRanges.length > 0
+      ? segmentRanges
+      : [{ start: 0, end: bestSegment.length }];
+
+  // Convert segment-relative ranges to full-description ranges
+  const fullRanges = effectiveSegmentRanges.map((range) => ({
+    start: segmentIndex + range.start,
+    end: segmentIndex + range.end,
+  }));
+
+  // Build snippet around the chosen segment, but from the FULL description
+  const firstRange = fullRanges[0];
+  const lastRange = fullRanges[fullRanges.length - 1];
+
+  const snippetStart = Math.max(0, firstRange.start - radius);
+  const snippetEnd = Math.min(text.length, lastRange.end + radius);
+
+  const prefix = snippetStart > 0 ? "…" : "";
+  const suffix = snippetEnd < text.length ? "…" : "";
+  const visible = text.slice(snippetStart, snippetEnd);
+
+  // Rebase full-description highlight ranges into snippet-local coordinates
+  const snippetRanges = fullRanges
+    .map((range) => ({
+      start: Math.max(0, range.start - snippetStart),
+      end: Math.min(snippetEnd - snippetStart, range.end - snippetStart),
+    }))
+    .filter((range) => range.end > range.start);
+
+  return (
+    <>
+      {prefix}
+      {highlightTextWithRanges(visible, snippetRanges)}
+      {suffix}
+    </>
+  );
+}
+
+
 // /rail-at-sas/frontend/components/landing/landing-hero-banner.tsx
 "use client";
 
